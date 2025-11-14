@@ -1,0 +1,20 @@
+model_class: TemplateClassificationGNN
+num_processes_training: 8
+template_classification_gnn_config:
+  encoder:
+    mol_out_channels: 1024
+    gnn_kwargs:
+      hidden_channels: 1024
+      num_layers: 5
+  mlp:
+    dropout: 0.4
+    hidden_dim: 256
+  label_smoothing: 0.15
+  training:
+    batch_size: 1024
+    learning_rate: 0.002
+    learning_rate_decay_step_size: 120
+    n_epochs: 150
+    check_val_every_n_epoch: 5
+    num_checkpoints_for_averaging: 5
+    n_devices: 4

@@ -1,0 +1,48 @@
+name: Unit tests
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  style:
+    runs-on: [self-hosted, 1ES.Pool=gh-actions-novartis]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run pre-commit checks
+        run: |
+          set -e
+          pip install pre-commit
+          pre-commit run --verbose --all-files
+  tests:
+    runs-on: [self-hosted, 1ES.Pool=gh-actions-novartis]
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+      - name: Free extra disk space
+        uses: jlumbroso/free-disk-space@main
+      - uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          mamba-version: "*"
+          channels: conda-forge,defaults
+          channel-priority: true
+          environment-file: environment.yml
+      - name: Install RetroChimera
+        run: |
+          pip install .[all]
+      - name: Run pytest
+        run: |
+          coverage run -p -m pytest \
+            --verbose \
+            --durations=50 \
+            --durations-min=1.0
+          coverage combine
+          coverage report

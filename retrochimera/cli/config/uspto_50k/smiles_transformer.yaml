@@ -1,0 +1,19 @@
+model_class: SmilesTransformer
+num_processes_training: 4
+smiles_transformer_config:
+  n_layers: 6
+  hidden_dim: 256
+  n_heads: 8
+  dropout: 0.3
+  schedule: noam
+  warm_up_steps: 8000
+  training:
+    gradient_clip_val: 1.0
+    learning_rate: 1.0
+    optimizer_betas: [0.9, 0.998]
+    n_epochs: 30
+    batch_size: 32
+    accumulate_grad_batches: 1
+    check_val_every_n_epoch: 1
+    num_checkpoints_for_averaging: 3
+    n_devices: 4

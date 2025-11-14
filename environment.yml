@@ -1,0 +1,26 @@
+name: retrochimera
+channels:
+  - pytorch
+  - nvidia
+  - pyg
+  - conda-forge
+  - defaults
+dependencies:
+  - pip==25.2
+  - python==3.9.7
+  # General
+  - numpy
+  - pandas
+  - scipy<1.12
+  # Chemistry
+  - rdkit=2023.09.6
+  - rdchiral_cpp
+  # Machine Learning
+  - pytorch=2.2.2=py3.9_cuda12.1_cudnn8.9.2_0
+  - pytorch-lightning==2.2.2
+  - pytorch-sparse==0.6.18
+  - pytorch-cluster==1.6.3
+  - pytorch-scatter==2.1.2
+  - torchvision==0.17.2
+  - pyg==2.5.2
+  - torchmetrics<0.11.0
