@@ -19,7 +19,7 @@ dependencies = [
     "joblib",
     "more_itertools",
     "omegaconf",
-    "protobuf==5.29.3",
+    "protobuf==5.29.5",
     "pydantic~=2.0",
     "pyopenssl>=23.0.0",
     "scikit-learn",
