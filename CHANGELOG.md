@@ -1,0 +1,15 @@
+# Changelog
+
+All notable changes to the project are documented in this file.
+
+The format follows [Common Changelog](https://common-changelog.org/),
+and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [1.0.0] - 2025-11-30
+
+:seedling: Initial public release.
+
+[Unreleased]: https://github.com/microsoft/retrochimera/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/microsoft/retrochimera/releases/tag/v1.0.0

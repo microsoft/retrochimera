@@ -1,0 +1,102 @@
+[build-system]
+requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "retrochimera"
+authors = [  # Note: PyPI does not support multiple authors with email addresses included.
+    {name = "Krzysztof Maziarz"},  # krzysztof.maziarz@microsoft.com
+    {name = "Guoqing Liu"},        # guoqingliu@microsoft.com
+    {name = "Marwin Segler"},      # marwinsegler@microsoft.com
+]
+description = "Frontier retrosynthesis prediction model"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {file = "LICENSE"}
+dynamic = ["version"]
+dependencies = [
+    "h5py",
+    "joblib",
+    "more_itertools",
+    "omegaconf",
+    "protobuf==5.29.3",
+    "pydantic~=2.0",
+    "pyopenssl>=23.0.0",
+    "scikit-learn",
+    "syntheseus>=0.7.0",
+    "syntheseus-root-aligned==0.2.0",
+    "tensorboard==2.12.0",
+    "tqdm",
+    "wandb==0.17.7",
+]
+
+[project.optional-dependencies]
+dev = ["coverage", "pytest"]
+graphium = ["syntheseus-graphium==0.1.0"]
+all = ["retrochimera[dev,graphium]"]
+
+[project.urls]
+Repository = "https://github.com/microsoft/retrochimera"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["retrochimera*"]
+exclude = ["retrochimera.tests*"]
+namespaces = false
+
+[tool.setuptools.package-data]
+"retrochimera" = ["py.typed"]
+
+[tool.setuptools_scm]
+
+[tool.black]
+line-length = 100
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.mypy_cache
+  | build
+  | dist
+)/
+'''
+
+[tool.coverage.run]
+include = ["./retrochimera/*"]
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.mypy]
+verbosity = 0
+
+[[tool.mypy.overrides]]
+module = [
+    "graphium.*",
+    "h5py.*",
+    "joblib.*",
+    "pandas.*",
+    "rdchiral.*",
+    "root_aligned.*",
+    "scipy.*",
+    "torch_geometric.*",
+    "tqdm.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+addopts = ["--color=yes", "--doctest-modules"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+# Check https://beta.ruff.rs/docs/rules/ for full list of rules
+select = ["E", "W", "F", "PLE"]
+ignore = [
+  "W605",  # Invalid escape sequence -- triggered by regex patterns
+  "E501",  # Line too long -- triggered by comments and such (black deals with shortening)
+  "E402",  # Module level import not at top of file -- triggered by python path manipulation
+  "E741",  # Do not use variables named 'l', 'o', or 'i' -- disagree with PEP8
+]

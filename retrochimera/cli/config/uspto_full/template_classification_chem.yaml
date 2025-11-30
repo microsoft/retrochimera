@@ -1,0 +1,13 @@
+model_class: TemplateClassificationChem
+num_processes_training: 8
+template_classification_chem_config:
+  mlp:
+    n_layers: 1
+  label_smoothing: 0.3
+  training:
+    batch_size: 1024
+    learning_rate: 0.002
+    learning_rate_decay_step_size: 100
+    n_epochs: 120
+    num_checkpoints_for_averaging: 5
+    n_devices: 4

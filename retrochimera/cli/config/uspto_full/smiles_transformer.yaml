@@ -1,0 +1,24 @@
+model_class: SmilesTransformer
+num_processes_training: 4
+smiles_transformer_config:
+  n_layers: 6
+  hidden_dim: 512
+  n_heads: 8
+  num_kv: 2
+  max_seq_len: 1024
+  dropout: 0.1
+  schedule: noam
+  warm_up_steps: 8000
+  activation: silu
+  initialization: opennmt_xavier
+  add_qkvbias: True
+  layer_norm: rms
+  share_encoder_decoder_input_embedding: False
+  training:
+    learning_rate: 1.0
+    optimizer_betas: [0.9, 0.998]
+    n_epochs: 60
+    batch_size: 32
+    num_checkpoints_for_averaging: 3
+    n_devices: 4
+    gradient_clip_val: 1.0

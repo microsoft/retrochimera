@@ -1,0 +1,6 @@
+To release a new stable version of `retrochimera` one needs to complete the following steps:
+
+1. Create a PR editing the `CHANGELOG.md` (note it has to be modified in three places).
+2. Run the ["Release Stable Version" workflow](https://github.com/microsoft/retrochimera/actions/workflows/release.yml), providing the version number as argument (use the `x.y.z` format _without_ the leading "v"; the workflow will prepend it wherever necessary). Make sure the branch is set to `main`. If this step does not work as intended the tag can always be deleted manually.
+3. Create a GitHub Release from the [newly created tag](https://github.com/microsoft/retrochimera/tags). Set the name to `retrochimera x.y.z`. The description should be the list of changes copied from the changelog. Consider including a short description before the list of changes to describe the main gist of the release.
+4. Release a new version to PyPI (e.g. by following [these instructions](https://realpython.com/pypi-publish-python-package/)). Consider publishing to [Test PyPI](https://test.pypi.org/) first to verify that the README renders correctly.

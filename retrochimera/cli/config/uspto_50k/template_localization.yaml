@@ -1,0 +1,19 @@
+model_class: TemplateLocalization
+num_processes_training: 0
+template_localization_config:
+  input_encoder:
+    atom_out_channels: 256
+    gnn_class: GPS_PNA
+    gnn_kwargs:
+      dropout: 0.1
+  rewrite_encoder:
+    atom_out_channels: 256
+    gnn_class: GPS_PNA
+    gnn_kwargs:
+      dropout: 0.1
+      num_layers: 4
+  num_negative_rewrites_in_localization: 1
+  training:
+    num_checkpoints_for_averaging: 5
+    n_devices: 4
+  negative_to_positive_targets_ratio: 10000
