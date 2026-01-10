@@ -8,7 +8,7 @@ import omegaconf
 import torch
 from syntheseus import BackwardReactionModel, Bag, Molecule, SingleProductReaction
 from syntheseus.interface.reaction import ReactionMetaData
-from syntheseus.reaction_prediction.inference.base import ExternalBackwardReactionModel
+from syntheseus.reaction_prediction.inference_base import ExternalBackwardReactionModel
 
 from retrochimera import inference
 from retrochimera.utils.misc import lookup_by_name
