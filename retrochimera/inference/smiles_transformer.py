@@ -8,7 +8,6 @@ from typing import Any, Generic, Sequence, TypeVar, Union
 import torch
 from syntheseus import BackwardReactionModel, Molecule, Reaction, SingleProductReaction
 from syntheseus.interface.reaction import ReactionMetaData
-from syntheseus.reaction_prediction.inference.root_aligned import RootAlignedModel
 from syntheseus.reaction_prediction.utils.inference import (
     get_unique_file_in_dir,
     process_raw_smiles_outputs_backwards,
@@ -85,6 +84,8 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
     def _build_kwargs_from_scores(
         self, scores: list[float], additional_info: dict
     ) -> list[ReactionMetaData]:
+        from syntheseus.reaction_prediction.inference.root_aligned import RootAlignedModel
+
         kwargs_list = RootAlignedModel.build_prediction_kwargs_from_scores(
             scores,
             num_augmentations=self.augmentation_size,
