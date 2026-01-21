@@ -86,7 +86,8 @@ def test_filtering() -> None:
         for rule_id in reloaded_rulebase.rules:
             assert reloaded_rulebase[rule_id].smarts == out.rulebase[rule_id].smarts
 
-        synth = RuleBasedRetrosynthesizer(rulebase_dir=temp_dir)
+        synth = RuleBasedRetrosynthesizer()
+        synth.start_server(rulebase_dir=temp_dir)
 
     res = synth.predict([Molecule("BrC1=CC=CC=C1COC1=CC=CC=C1", identifier=0)])
     assert len(res) > 0

@@ -176,7 +176,6 @@ class RulePrediction:
 class RuleBasedRetrosynthesizer:
     def __init__(
         self,
-        rulebase_dir: Union[str, Path],
         *,
         num_templates_per_result: int = 10,
         min_num_rules_to_apply: int = 5,
@@ -188,7 +187,6 @@ class RuleBasedRetrosynthesizer:
         """Initialize a rule-based model.
 
         Args:
-            rulebase_dir: Directory containing the rulebase file.
             num_templates_per_result: Ratio of the maximum number of templates we should try
                 applying to the number of results requested by the caller.
             min_num_rules_to_apply: Minimum number of rules to apply before potentially breaking due
@@ -204,17 +202,28 @@ class RuleBasedRetrosynthesizer:
         """
         super().__init__(**kwargs)  # In case this is one of several base classes in the MRO.
 
+        self._server: Optional[Any] = None
+        self._num_templates_per_result = num_templates_per_result
+        self._min_num_rules_to_apply = min_num_rules_to_apply
+        self._max_cumulative_prob = max_cumulative_prob
+        self._apply_rules_timeout = apply_rules_timeout
+        self._include_all_metadata = include_all_metadata
+
+    def start_server(self, rulebase_dir: Union[str, Path]) -> None:
+        """Instantiate the rule application server lazily."""
+
         # Local to avoid circular import.
         from retrochimera.chem.rule_application_server import RuleApplicationServer
 
         self._server = RuleApplicationServer(
             rulebase_dir=rulebase_dir, rule_application_kwargs=self._rule_application_server_kwargs
         )
-        self._num_templates_per_result = num_templates_per_result
-        self._min_num_rules_to_apply = min_num_rules_to_apply
-        self._max_cumulative_prob = max_cumulative_prob
-        self._apply_rules_timeout = apply_rules_timeout
-        self._include_all_metadata = include_all_metadata
+
+    def _get_server(self):
+        if self._server is None:
+            raise RuntimeError("Class not ready as `start_server()` was not called")
+
+        return self._server
 
     @property
     def _rule_application_server_kwargs(self) -> dict[str, Any]:
@@ -245,10 +254,11 @@ class RuleBasedRetrosynthesizer:
         self, targets: list[Molecule], top_k=50
     ) -> list[list[RulePrediction]]:
         """Predict the `top_k` rule IDs to apply to the each molecule in the batch."""
+        server = self._get_server()
         return [
             [
-                RulePrediction(id=rule_id, prob=1.0 / len(self._server.rule_ids))
-                for rule_id in self._server.rule_ids
+                RulePrediction(id=rule_id, prob=1.0 / len(server.rule_ids))
+                for rule_id in server.rule_ids
             ]
             for _ in targets
         ]
@@ -285,7 +295,7 @@ class RuleBasedRetrosynthesizer:
             {"timeout": self._apply_rules_timeout} if self._apply_rules_timeout else {}
         )
 
-        batch_raw_results = self._server.apply_rules(
+        batch_raw_results = self._get_server().apply_rules(
             inputs=inputs, rule_ids_to_apply=batch_rule_ids_to_apply, **apply_rules_kwargs
         )
 

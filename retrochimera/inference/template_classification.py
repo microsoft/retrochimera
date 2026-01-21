@@ -1,55 +1,32 @@
-from pathlib import Path
-from typing import Any, Optional, Sequence, Union
+from typing import Any, Sequence
 
-from syntheseus import BackwardReactionModel, Molecule, SingleProductReaction
+from syntheseus import Molecule, SingleProductReaction
+from syntheseus.reaction_prediction.inference_base import ExternalBackwardReactionModel
 from syntheseus.reaction_prediction.utils.inference import get_unique_file_in_dir
 
 from retrochimera.chem.rules import RuleBasedRetrosynthesizer, RulePrediction
 
 
-class TemplateClassificationModel(RuleBasedRetrosynthesizer, BackwardReactionModel):
+class TemplateClassificationModel(RuleBasedRetrosynthesizer, ExternalBackwardReactionModel):
     """Wrapper for a model performing template classification backed by a given molecule encoder."""
 
-    def __init__(
-        self,
-        *args,
-        model_dir: Optional[Union[str, Path]],
-        device: str = "cuda:0",
-        model: Optional[Any] = None,
-        **kwargs,
-    ) -> None:
+    def __init__(self, *args, **kwargs) -> None:
         """Initializes the TemplateClassification model wrapper.
 
         Assumed format of the model directory:
         - `model_dir` contains the model checkpoint as the only `*.ckpt` file
         """
 
-        if (model_dir is None) == (model is None):
-            raise ValueError(
-                "Exactly one of `model_dir` and `model` attributes has to be specified."
-            )
-
         from retrochimera.models.template_classification import MCCModel
 
-        if model:
-            assert model.rulebase_dir is not None
+        super().__init__(*args, **kwargs)
+        self.start_server(rulebase_dir=self.model_dir)
 
-            self.model = model
-            super().__init__(*args, **(kwargs | {"rulebase_dir": model.rulebase_dir}))
-        else:
-            assert model_dir is not None
-
-            super().__init__(*args, **(kwargs | {"rulebase_dir": model_dir}))
-            self.model = MCCModel.load_from_checkpoint(
-                get_unique_file_in_dir(model_dir, pattern="*.ckpt")
-            )
-            self.model.to(device)
-
+        self.model = MCCModel.load_from_checkpoint(
+            get_unique_file_in_dir(self.model_dir, pattern="*.ckpt")
+        )
+        self.model.to(self.device)
         self.model.eval()
-
-    @property
-    def device(self):
-        return self.model.device
 
     def get_model_info(self) -> dict[str, Any]:
         return self.model.hparams
