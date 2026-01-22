@@ -7,9 +7,15 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Changed
+
+- Avoid circular imports that would arise during integration into `syntheseus` ([#6](https://github.com/microsoft/syntheseus/pull/6)) ([@kmaziarz])
+
 ## [1.0.0] - 2025-11-30
 
 :seedling: Initial public release.
 
 [Unreleased]: https://github.com/microsoft/retrochimera/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/microsoft/retrochimera/releases/tag/v1.0.0
+
+[@kmaziarz]: https://github.com/kmaziarz

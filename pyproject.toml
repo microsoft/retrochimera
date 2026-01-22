@@ -23,7 +23,7 @@ dependencies = [
     "pydantic~=2.0",
     "pyopenssl>=23.0.0",
     "scikit-learn",
-    "syntheseus>=0.7.0",
+    "syntheseus>=0.7.1",
     "syntheseus-root-aligned==0.2.0",
     "tensorboard==2.12.0",
     "tqdm",
