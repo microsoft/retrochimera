@@ -2,12 +2,12 @@ import argparse
 import math
 import multiprocessing
 from abc import abstractmethod
-from pathlib import Path
-from typing import Any, Generic, Sequence, TypeVar, Union
+from typing import Any, Generic, Sequence, TypeVar
 
 import torch
-from syntheseus import BackwardReactionModel, Molecule, Reaction, SingleProductReaction
+from syntheseus import Molecule, Reaction, SingleProductReaction
 from syntheseus.interface.reaction import ReactionMetaData
+from syntheseus.reaction_prediction.inference_base import ExternalBackwardReactionModel
 from syntheseus.reaction_prediction.utils.inference import (
     get_unique_file_in_dir,
     process_raw_smiles_outputs_backwards,
@@ -30,8 +30,6 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
     def __init__(
         self,
         *args,
-        model_dir: Union[str, Path],
-        device: str = "cuda:0",
         beam_size: int = 20,
         augmentation_size: int = 10,
         max_generated_seq_len: int = 512,
@@ -50,14 +48,18 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
 
         super().__init__(*args, **kwargs)
 
+        if not (hasattr(self, "model_dir") and hasattr(self, "device")):
+            raise ValueError(
+                "Class based on `AbstractSmilesTransformerModel` should extended `ReactionModel`"
+            )
+
         # There should be exaclty one `*.ckpt` file under `model_dir`.
-        chkpt_path = get_unique_file_in_dir(model_dir, pattern="*.ckpt")
-        vocab_path = get_unique_file_in_dir(model_dir, pattern="*.txt")
+        chkpt_path = get_unique_file_in_dir(self.model_dir, pattern="*.ckpt")
+        vocab_path = get_unique_file_in_dir(self.model_dir, pattern="*.txt")
 
         with suppress_outputs():
             self.model = TransformerModel.load_from_checkpoint(chkpt_path, vocab_path=vocab_path)
 
-        self.device = device
         self.model = self.model.to(self.device)
         self.model.eval()
 
@@ -163,7 +165,7 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
         augmented_batch = self._smiles_to_batch(augmented_inputs)
 
         augmented_batch_to_device = {
-            key: val.to(self.device) if type(val) == torch.Tensor else val
+            key: val.to(self.device) if type(val) == torch.Tensor else val  # type: ignore[attr-defined]
             for key, val in augmented_batch.items()
         }
 
@@ -274,7 +276,7 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
 
 
 class SmilesTransformerModel(
-    AbstractSmilesTransformerModel[Molecule, SingleProductReaction], BackwardReactionModel
+    AbstractSmilesTransformerModel[Molecule, SingleProductReaction], ExternalBackwardReactionModel
 ):
     def _augment_input(self, input: Molecule) -> list[str]:
         from root_aligned.preprocessing.generate_PtoR_data import clear_map_canonical_smiles

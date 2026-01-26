@@ -56,7 +56,8 @@ def test_check_results() -> None:
 def make_retrosynthesizer_from_rulebase(rulebase: RuleBase) -> RuleBasedRetrosynthesizer:
     with tempfile.TemporaryDirectory() as temp_dir:
         rulebase.save_to_file(dir=temp_dir)
-        model = RuleBasedRetrosynthesizer(rulebase_dir=temp_dir)
+        model = RuleBasedRetrosynthesizer()
+        model.start_server(rulebase_dir=temp_dir)
 
     return model
 

@@ -1,23 +1,21 @@
 import math
-from pathlib import Path
-from typing import Any, Optional, Sequence, Union
+from typing import Any, Optional, Sequence
 
-from syntheseus import BackwardReactionModel, Molecule, SingleProductReaction
+from syntheseus import Molecule, SingleProductReaction
 from syntheseus.interface.reaction import ReactionMetaData
+from syntheseus.reaction_prediction.inference_base import ExternalBackwardReactionModel
 from syntheseus.reaction_prediction.utils.inference import get_unique_file_in_dir
 
 from retrochimera.chem.rewrite import RewriteResult
 from retrochimera.chem.rules import RuleBasedRetrosynthesizer, RulePrediction
 
 
-class TemplateLocalizationModel(RuleBasedRetrosynthesizer, BackwardReactionModel):
+class TemplateLocalizationModel(RuleBasedRetrosynthesizer, ExternalBackwardReactionModel):
     """Wrapper for the template localization model."""
 
     def __init__(
         self,
         *args,
-        model_dir: Union[str, Path],
-        device: str = "cuda:0",
         localization_score_weight: float = 2.25,
         classification_temperature: Optional[float] = 30.0,
         output_temperature: float = 1.0,
@@ -34,17 +32,17 @@ class TemplateLocalizationModel(RuleBasedRetrosynthesizer, BackwardReactionModel
             TemplateLocalizationModel as LocalizationModel,
         )
 
-        super().__init__(*args, **(kwargs | {"rulebase_dir": model_dir}))
+        super().__init__(*args, **kwargs)
+        self.start_server(rulebase_dir=self.model_dir)
 
         self.model = LocalizationModel.load_from_checkpoint(
-            get_unique_file_in_dir(model_dir, pattern="*.ckpt")
+            get_unique_file_in_dir(self.model_dir, pattern="*.ckpt")
         )
-        self.device = device
         self._localization_score_weight = localization_score_weight
         self._classification_temperature = classification_temperature
         self._output_temperature = output_temperature
 
-        self.model.to(device)
+        self.model.to(self.device)
         self.model.eval()
 
         # These should be set if the model was loaded from a trained checkpoint.

@@ -2,16 +2,17 @@ import random
 from typing import Sequence
 
 import numpy as np
-from syntheseus import Bag, ForwardReactionModel, Molecule, Reaction
+from syntheseus import Bag, Molecule, Reaction
 from syntheseus.interface.molecule import SMILES_SEPARATOR
 from syntheseus.interface.reaction import ReactionMetaData
+from syntheseus.reaction_prediction.inference_base import ExternalForwardReactionModel
 from syntheseus.reaction_prediction.utils.inference import process_raw_smiles_outputs_forwards
 
 from retrochimera.inference.smiles_transformer import AbstractSmilesTransformerModel
 
 
 class SmilesTransformerForwardModel(
-    AbstractSmilesTransformerModel[Bag[Molecule], Reaction], ForwardReactionModel
+    AbstractSmilesTransformerModel[Bag[Molecule], Reaction], ExternalForwardReactionModel
 ):
     def _augment_input(self, input: Bag[Molecule]) -> list[str]:
         from root_aligned.preprocessing.generate_PtoR_data import clear_map_canonical_smiles
