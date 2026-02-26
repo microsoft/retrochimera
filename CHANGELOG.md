@@ -11,6 +11,7 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 - Avoid circular imports that would arise during integration into `syntheseus` ([#6](https://github.com/microsoft/retrochimera/pull/6)) ([@kmaziarz])
 - Base submodel classes on `ExternalBackwardReactionModel` from `syntheseus` ([#7](https://github.com/microsoft/retrochimera/pull/7)) ([@kmaziarz])
+- Expose submodel classes under externally-facing names ([#9](https://github.com/microsoft/retrochimera/pull/9)) ([@kmaziarz])
 
 ## [1.0.0] - 2025-11-30
 
