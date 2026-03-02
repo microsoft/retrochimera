@@ -4,7 +4,7 @@ from retrochimera.inference.template_classification import TemplateClassificatio
 from retrochimera.inference.template_localization import TemplateLocalizationModel
 
 
-class NeuralSymModel(TemplateClassificationModel):
+class BasicTemplateClassificationModel(TemplateClassificationModel):
     pass
 
 
@@ -17,7 +17,7 @@ class RetroChimeraEditModel(TemplateLocalizationModel):
 
 
 __all__ = [
-    "NeuralSymModel",
+    "BasicTemplateClassificationModel",
     "RetroChimeraDeNovoModel",
     "RetroChimeraEditModel",
     "RetroChimeraModel",

@@ -5,14 +5,14 @@ os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
 
 
 from retrochimera.inference import (
-    NeuralSymModel,
+    BasicTemplateClassificationModel,
     RetroChimeraDeNovoModel,
     RetroChimeraEditModel,
     RetroChimeraModel,
 )
 
 __all__ = [
-    "NeuralSymModel",
+    "BasicTemplateClassificationModel",
     "RetroChimeraDeNovoModel",
     "RetroChimeraEditModel",
     "RetroChimeraModel",
