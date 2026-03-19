@@ -25,7 +25,7 @@ dependencies = [
     "scikit-learn",
     "syntheseus>=0.7.1",
     "syntheseus-root-aligned==0.2.0",
-    "tensorboard==2.12.0",
+    "tensorboard>=2.12.0",
     "tqdm",
     "wandb==0.17.7",
 ]
