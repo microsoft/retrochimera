@@ -180,7 +180,7 @@ class TrainConfig(ModelTrainingConfig):
 
     processed_data_dir: str = MISSING  # Directory for saving preprocessed data
     checkpoint_dir: str = MISSING  # Directory to store pytorch lightning model checkpoints
-    log_dir: str = "."  # Directory to store TensorBoard logs
+    log_dir: str = "."  # Directory to store logs
     seed: int = 0  # Seed to use for all sources of randomness (Python, numpy, torch)
 
     num_processes_training: int = 1  # Number of processes to use for training
