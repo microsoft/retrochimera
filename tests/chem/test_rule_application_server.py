@@ -1,5 +1,7 @@
+import gc
 import random
 import tempfile
+from multiprocessing import active_children
 
 import pytest
 from syntheseus.reaction_prediction.data.reaction_sample import ReactionSample
@@ -46,3 +48,18 @@ def test_apply_rules(reaction_dataset: ReactionDataset, num_inputs: int, num_pro
             results_naive.extend(get_products(input, rule=reaction_dataset.rulebase[rule_id].rxn))
 
         assert sum(results, []) == results_naive
+
+
+def test_processes_cleaned_up_on_gc(tiny_rulebase):
+    """Verify that worker processes are cleaned up when the server is garbage collected."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        tiny_rulebase.save_to_file(dir=temp_dir)
+        server = RuleApplicationServer(rulebase_dir=temp_dir, num_processes=1)
+
+    workers_before = set(active_children())
+    assert len(workers_before) >= 1
+
+    del server
+    gc.collect()
+
+    assert not workers_before & set(active_children())
