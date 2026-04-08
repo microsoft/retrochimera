@@ -7,7 +7,13 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Changed
+
 - Drop the explicit TensorBoard dependency ([#12](https://github.com/microsoft/retrochimera/pull/12)) ([@kmaziarz])
+
+### Added
+
+- Expose setting `num_processes` for template-based models ([#13](https://github.com/microsoft/retrochimera/pull/13)) ([@kmaziarz])
 
 ## [1.1.0] - 2026-03-12
 
