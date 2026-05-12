@@ -94,26 +94,40 @@ class TemplateLocalizationModel(RuleBasedRetrosynthesizer, ExternalBackwardReact
         input_graphs_atom_outputs = input_graphs_enc.atom_outputs
         assert input_graphs_atom_outputs is not None
 
+        # Batched localization-scores compute:
+        # For each input graph we stack the LHS atom-output rows of all top-k rules
+        # into one tensor and do a single mm + log_softmax + CPU transfer, instead of
+        # `top_k` small mm/log_softmax/transfer round-trips. Numerically equivalent
+        # (same dtype, same per-row log_softmax along atom axis); cuBLAS may pick a
+        # different kernel for the larger GEMM, producing rounding differences well
+        # within the relaxed equality tolerance.
         results = []
+        rule_lhs_list = self.all_rewrites_atom_outputs_list
         for idx, (rule_ids, rule_probs) in enumerate(
             get_sorted_ids_and_probs(batch_rule_logits, k=top_k)
         ):
             input_graph_atom_outputs = torch.t(input_graphs_atom_outputs[input_graphs.batch == idx])
+
+            lhs_chunks = [rule_lhs_list[rule_id] for rule_id in rule_ids]
+            chunk_sizes = [c.size(0) for c in lhs_chunks]
+            # All chunks share the same hidden dim, so torch.cat is cheap.
+            big_lhs = torch.cat(lhs_chunks, dim=0)
+            big_scores = torch.mm(big_lhs, input_graph_atom_outputs)
+            big_scores = torch.nn.functional.log_softmax(big_scores, dim=-1)
+            # One CPU transfer for the whole block, then slice on CPU.
+            big_scores_list = tensor_to_list(big_scores)
+
             graph_results = []
-
-            for rule_id, rule_prob in zip(rule_ids, rule_probs):
-                localization_scores = torch.mm(
-                    self.all_rewrites_atom_outputs_list[rule_id], input_graph_atom_outputs
-                )
-                localization_scores = torch.nn.functional.log_softmax(localization_scores, dim=-1)
-
+            offset = 0
+            for rule_id, rule_prob, sz in zip(rule_ids, rule_probs, chunk_sizes):
                 graph_results.append(
                     RulePrediction(
                         id=rule_id,
                         prob=rule_prob,
-                        localization_scores=tensor_to_list(localization_scores),
+                        localization_scores=big_scores_list[offset : offset + sz],
                     )
                 )
+                offset += sz
 
             results.append(graph_results)
 
