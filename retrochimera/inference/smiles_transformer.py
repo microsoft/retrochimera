@@ -211,14 +211,16 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
                 assert isinstance(line[0], str)
                 lines.append((line[0], augmented_batch_scores[i][j]))
 
-        raw_predictions = []
-        pool = multiprocessing.Pool(4)
+        # OPT: avoid forking a fresh `multiprocessing.Pool(4)` per call; the fork+IPC overhead
+        # dominates for small-to-medium batches. Use a process-wide persistent pool, sized to the
+        # current input volume.
+        from retrochimera.utils._persistent_pool import get_pool
 
-        raw_predictions = pool.map(
-            func=canonicalize_smiles_clear_map, iterable=lines
-        )  # canonicalize reactants and modify illegal reactants into empty strings
-        pool.close()
-        pool.join()
+        pool = get_pool(4)
+        if pool is not None and len(lines) >= 32:
+            raw_predictions = pool.map(canonicalize_smiles_clear_map, lines)
+        else:
+            raw_predictions = [canonicalize_smiles_clear_map(line) for line in lines]
 
         predictions = []
         left_index = 0

@@ -114,7 +114,7 @@ class Translator(object):
                 - src_lengths (torch.Tensor): shape of src_lengths: (batch_size,)
             - batch_size: int
         """
-        with torch.no_grad():
+        with torch.inference_mode():
             # TODO: support these blacklisted features
             decode_strategy = BeamSearch(
                 pad=self._tgt_pad_idx,
@@ -186,6 +186,26 @@ class Translator(object):
         if fn_map_state is not None:
             self.model.decoder.map_state(fn_map_state, only_map_src=True)
 
+        # OPT: Pre-transpose memory_bank once to (batch*beam, src_len, hidden_dim) so we avoid the
+        # per-step transpose+contiguous() inside `_decode_and_generate`.
+        memory_bank_bt = memory_bank.transpose(0, 1).contiguous()
+        src_pad_len = memory_bank_bt.size(1)
+        # OPT: Pre-compute the encoder padding mask once (B*beam, src_len) and prune it together
+        # with `memory_lengths` after each batch finishes (instead of recomputing every step).
+        memory_padding_mask = (
+            torch.arange(0, src_pad_len, device=memory_bank_bt.device)
+            >= memory_lengths.unsqueeze(1)
+        )
+
+        # OPT: Hoist `complete_seq_log_prob` allocation out of the loop.
+        complete_seq_log_prob = None
+        if self.customised_beam_search:
+            vocab_size = self._tgt_vocab_len
+            complete_seq_log_prob = torch.full(
+                (1, vocab_size), -1e5, device=memory_bank_bt.device, dtype=torch.float32
+            )
+            complete_seq_log_prob[:, self._tgt_eos_idx] = 0.0
+
         # (3) Begin decoding step by step:
         for step in range(decode_strategy.max_length):
             decoder_input = decode_strategy.current_predictions.view(
@@ -195,40 +215,23 @@ class Translator(object):
 
             log_probs, attn = self._decode_and_generate(
                 decoder_input,
-                memory_bank,
+                memory_bank_bt,
                 batch,
                 memory_lengths=memory_lengths,
                 src_map=src_map,
                 step=step,
                 batch_offset=decode_strategy.batch_offset,  # type: ignore
+                memory_padding_mask=memory_padding_mask,
             )  # (batch_size * beam_size, vocab)
 
             if self.customised_beam_search:
                 # modify the log_probs for finished sentences.
-                _, vocab_size = tuple(log_probs.shape)
-                bad_token_log_prob = -1e5
-
-                complete_seq_log_prob = (torch.ones((1, vocab_size)) * bad_token_log_prob).to(
-                    log_probs.device
-                )  # shape: (1, vocab_size)
-                complete_seq_log_prob[:, self._tgt_eos_idx] = 0.0  # shape: (1, vocab_size)
-
                 # Use this vector in the output for sequences which are complete.
                 is_end_token = (
                     decoder_input.squeeze() == self._tgt_eos_idx
                 )  # shape: (batch_size * beam_size,)
                 log_prob_mask = is_end_token.unsqueeze(1)  # shape: (batch_size * beam_size, 1)
-                log_probs = (log_prob_mask * complete_seq_log_prob) + (
-                    ~log_prob_mask * log_probs
-                )  # shape: (batch_size * beam_size, vocab_size)
-
-                assert log_probs.dim() == 2, f"Expected 2D tensor, got {log_probs.dim()}"
-                assert log_probs.size(0) == decoder_input.size(
-                    1
-                ), f"Expected {batch_size * parallel_paths}, got {log_probs.size(0)}"
-                assert (
-                    log_probs.size(1) == vocab_size
-                ), f"Expected {vocab_size}, got {log_probs.size(1)}"
+                log_probs = torch.where(log_prob_mask, complete_seq_log_prob, log_probs)
 
             decode_strategy.advance(log_probs, attn)
             any_finished = decode_strategy.is_finished.any()
@@ -241,12 +244,15 @@ class Translator(object):
 
             if any_finished:
                 # Reorder states.
-                if isinstance(memory_bank, tuple):
-                    memory_bank = tuple(x.index_select(1, select_indices) for x in memory_bank)
+                if isinstance(memory_bank_bt, tuple):
+                    memory_bank_bt = tuple(
+                        x.index_select(0, select_indices) for x in memory_bank_bt
+                    )
                 else:
-                    memory_bank = memory_bank.index_select(1, select_indices)
+                    memory_bank_bt = memory_bank_bt.index_select(0, select_indices)
 
                 memory_lengths = memory_lengths.index_select(0, select_indices)
+                memory_padding_mask = memory_padding_mask.index_select(0, select_indices)
 
                 if src_map is not None:
                     src_map = src_map.index_select(1, select_indices)
@@ -308,43 +314,15 @@ class Translator(object):
         src_map=None,
         step: Optional[int] = None,
         batch_offset: torch.LongTensor = None,
+        memory_padding_mask: Optional[torch.Tensor] = None,
     ):
         """Decode and generate one step.
 
-        Args:
-            decoder_in (torch.Tensor): shape: (1, batch_size * beam_size, 1), due to kv_cache mechanism
-            memory_bank (torch.Tensor): shape: (padded_src_len, batch_size * beam_size, hidden_dim)
-            batch (dict), keys:
-            - src: Tuple(src, src_lengths)
-                - src (torch.Tensor): shape of src: (padded_src_len, batch_size, 1)
-                - src_lengths (torch.Tensor): shape of src_lengths: (batch_size,)
-            - batch_size: int
-            memory_lengths (torch.Tensor): shape: (batch_size * beam_size,)
-            src_map (torch.Tensor): None
-            step (int): current step
-            batch_offset (int): batch offset
-
-        Returns:
-            log_probs (torch.Tensor): shape: (batch_size * beam_size, vocab)
-            attn (torch.Tensor): shape: (batch_size * beam_size, tgt_len, src_len)
+        ``memory_bank`` may be either the original (padded_src_len, batch_size * beam_size,
+        hidden_dim) layout or a pre-transposed (batch_size * beam_size, padded_src_len, hidden_dim)
+        contiguous tensor (the OPT path). When ``memory_padding_mask`` is provided the recompute
+        of the encoder padding mask is skipped.
         """
-        # dec_out, dec_attn = self.model.decoder(
-        #     decoder_in, memory_bank, memory_lengths=memory_lengths, step=step
-        # )
-
-        # # Generator forward.
-        # if "std" in dec_attn:
-        #     attn = dec_attn["std"]
-        # else:
-        #     attn = None
-        # log_probs = self.model.generator(dec_out.squeeze(0))
-
-        # return log_probs, attn
-
-        # Decoder forward, takes [batch, tgt_len, nfeats] as input
-        # and [batch, src_len, hidden] as enc_out
-        # in case of inference tgt_len = 1, batch = beam times batch_size
-        # in case of Gold Scoring tgt_len = actual length, batch = 1 batch
 
         decoder_embedding = self.model.construct_input(
             decoder_in.transpose(0, 1).contiguous(), step=step, is_encoder=False
@@ -354,36 +332,30 @@ class Translator(object):
         decoder_padding_mask = decoder_in.eq(self._tgt_pad_idx).squeeze(
             2
         )  # shape: (1, batch_size * beam_size)
-        memory_padding_mask = torch.arange(
-            0, max(memory_lengths), device=memory_bank.device
-        ) >= memory_lengths.unsqueeze(
-            1
-        )  # shape: (batch_size * beam_size, padded_src_len)
+
+        if memory_padding_mask is None:
+            memory_padding_mask = torch.arange(
+                0, max(memory_lengths), device=memory_bank.device
+            ) >= memory_lengths.unsqueeze(1)
+            enc_out = memory_bank.transpose(0, 1).contiguous()
+        else:
+            # OPT: ``memory_bank`` already in (B*beam, src_len, hidden) layout.
+            enc_out = memory_bank
 
         dec_out, dec_attn = self.model.decoder.forward(
-            tgt=decoder_embedding,  # shape: (batch_size * beam_size, 1, hidden_dim)
-            tgt_key_padding_mask=decoder_padding_mask.transpose(
-                0, 1
-            ).contiguous(),  # shape: (batch_size * beam_size, 1)
-            enc_out=memory_bank.transpose(
-                0, 1
-            ).contiguous(),  # shape: (batch_size * beam_size, padded_src_len, hidden_dim)
-            enc_key_padding_mask=memory_padding_mask,  # shape: (batch_size * beam_size, padded_src_len)
+            tgt=decoder_embedding,
+            tgt_key_padding_mask=decoder_padding_mask.transpose(0, 1).contiguous(),
+            enc_out=enc_out,
+            enc_key_padding_mask=memory_padding_mask,
             step=step,
-        )  # shape: (batch_size, tgt_len-1, hidden_dim)
+        )
 
-        # Generator forward.
         if "std" in dec_attn:
             attn = dec_attn["std"]
         else:
             attn = None
-        # scores = self.model.generator(dec_out.squeeze(1))
-        scores = self.model.token_fc(
-            dec_out.squeeze(1)
-        )  # shape: (batch_size * beam_size, vocab_size)
-        log_probs = log_softmax(scores, dim=-1)  # shape: (batch_size * beam_size, vocab_size)
-        # returns [(batch_size x beam_size) , vocab ] when 1 step
-        # or [batch_size, tgt_len, vocab ] when full sentence
+        scores = self.model.token_fc(dec_out.squeeze(1))
+        log_probs = log_softmax(scores, dim=-1)
 
         return log_probs, attn
 
