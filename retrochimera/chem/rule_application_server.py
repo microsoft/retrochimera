@@ -139,16 +139,6 @@ class RuleApplicationServer:
             args=(data,),
         )
 
-    def _connection_try_recv(self, process_id: int, restart_on_failure: bool) -> Any:
-        return self._connection_try_call(
-            process_id=process_id, restart_on_failure=restart_on_failure, fn_name="recv", args=()
-        )
-
-    def _connection_try_close(self, process_id: int) -> None:
-        self._connection_try_call(
-            process_id=process_id, restart_on_failure=False, fn_name="close", args=()
-        )
-
     @staticmethod
     def _finalize_server(processes: dict[int, Process], connections: dict[int, Connection]) -> None:
         """Clean up worker processes. Must not reference `self` to allow garbage collection."""
