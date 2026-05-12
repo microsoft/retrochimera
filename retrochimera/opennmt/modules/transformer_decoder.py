@@ -631,14 +631,20 @@ class TransformerDecoder(TransformerDecoderBase):
                 )
 
         dec_out = tgt
-        src_len = enc_key_padding_mask.eq(0).sum(dim=1).long()  # shape: (batch_size,)
-        src_max_len = self.state["src"].shape[
-            0
-        ]  # self.state["src"] shape: (padded_src_len, batch_size, 1)
-
-        src_pad_mask = sequence_mask(src_len, src_max_len).unsqueeze(
-            1
-        )  # shape: (batch_size, 1, padded_src_len)
+        # OPT: callers may pass a precomputed source padding mask to skip the per-step
+        # ``sequence_mask`` reconstruction (which uses GPU reductions + a fresh ``torch.arange``
+        # every step). Falls back to the original behaviour when not supplied.
+        precomputed_src_pad_mask = kwargs.pop("src_pad_mask", None)
+        if precomputed_src_pad_mask is not None:
+            src_pad_mask = (
+                precomputed_src_pad_mask.unsqueeze(1)
+                if precomputed_src_pad_mask.dim() == 2
+                else precomputed_src_pad_mask
+            )
+        else:
+            src_len = enc_key_padding_mask.eq(0).sum(dim=1).long()  # shape: (batch_size,)
+            src_max_len = self.state["src"].shape[0]
+            src_pad_mask = sequence_mask(src_len, src_max_len).unsqueeze(1)
         tgt_pad_mask = tgt_key_padding_mask.unsqueeze(1)  # shape: (batch_size, 1, padded_tgt_len/1)
 
         with_align = kwargs.pop("with_align", False)
