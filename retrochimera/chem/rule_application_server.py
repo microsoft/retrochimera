@@ -94,8 +94,11 @@ class RuleApplicationServer:
             # Block until the process has loaded its chunk of the rulebase.
             self._connections[process_id].recv()
 
-        # Register the `close` method to be called when the server object is garbage collected.
-        weakref.finalize(self, self.close)
+        # Register cleanup to run when this server object is garbage collected. We cannot pass a
+        # bound method (`self.close`) as it contains a reference to `self` which would prevent GC.
+        weakref.finalize(
+            self, RuleApplicationServer._finalize_server, self._processes, self._connections
+        )
 
     def _start_processes(self, process_ids: list[int]) -> None:
         for process_id in process_ids:
@@ -136,43 +139,45 @@ class RuleApplicationServer:
             args=(data,),
         )
 
-    def _connection_try_recv(self, process_id: int, restart_on_failure: bool) -> Any:
-        return self._connection_try_call(
-            process_id=process_id, restart_on_failure=restart_on_failure, fn_name="recv", args=()
-        )
-
-    def _connection_try_close(self, process_id: int) -> None:
-        self._connection_try_call(
-            process_id=process_id, restart_on_failure=False, fn_name="close", args=()
-        )
-
-    def _close_processes(self, process_ids: list[int]) -> None:
-        # Filter out processes that are already closed.
-        process_ids = [process_id for process_id in process_ids if process_id in self._processes]
-
-        for process_id in process_ids:
-            self._connection_try_send(process_id=process_id, restart_on_failure=False, data=None)
-
-        for process_id in process_ids:
-            # First wait to see if the process finishes gracefully; if not, SIGTERM it.
-            self._processes[process_id].join(timeout=2.0)
-            self._processes[process_id].terminate()
-
-        for process_id in process_ids:
-            self._processes[process_id].join(timeout=2.0)
-
-        for process_id in process_ids:
+    @staticmethod
+    def _finalize_server(processes: dict[int, Process], connections: dict[int, Connection]) -> None:
+        """Clean up worker processes. Must not reference `self` to allow garbage collection."""
+        for process_id in processes:
             try:
-                self._processes[process_id].close()
+                connections[process_id].send(None)
+            except (ConnectionResetError, BrokenPipeError, OSError):
+                pass
+
+        for process_id in processes:
+            # First wait to see if the process finishes gracefully; if not, SIGTERM it.
+            processes[process_id].join(timeout=2.0)
+            processes[process_id].terminate()
+
+        for process_id in processes:
+            processes[process_id].join(timeout=2.0)
+
+        for process_id in processes:
+            try:
+                processes[process_id].close()
             except ValueError as e:
                 logger.warning(
                     f"Error trying to close a rule application process {process_id}: {e}"
                 )
 
-            self._connection_try_close(process_id=process_id)
+            try:
+                connections[process_id].close()
+            except Exception:
+                pass
 
-            del self._processes[process_id]
-            del self._connections[process_id]
+    def _close_processes(self, process_ids: list[int]) -> None:
+        process_ids = [process_id for process_id in process_ids if process_id in self._processes]
+        if not process_ids:
+            return
+
+        # Extract into separate dicts and delegate to the static cleanup method.
+        sub_processes = {pid: self._processes.pop(pid) for pid in process_ids}
+        sub_connections = {pid: self._connections.pop(pid) for pid in process_ids}
+        RuleApplicationServer._finalize_server(sub_processes, sub_connections)
 
     def _close_all_processes(self) -> None:
         self._close_processes(list(range(self._num_processes)))
