@@ -348,7 +348,6 @@ class Translator(object):
             enc_out=enc_out,
             enc_key_padding_mask=memory_padding_mask,
             step=step,
-            src_pad_mask=memory_padding_mask if memory_padding_mask is not None else None,
         )
 
         if "std" in dec_attn:
