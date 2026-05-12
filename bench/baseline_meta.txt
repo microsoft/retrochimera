@@ -1,0 +1,4 @@
+ec39be30998ea403092d39054d747ccfb93d897f
+torch 2.7.1+cu126
+cuda 12.6
+device NVIDIA A100 80GB PCIe

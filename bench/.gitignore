@@ -1,0 +1,5 @@
+# Large prediction-dump artifacts and per-run diffs are not tracked.
+baseline_*.json
+exp_*.json
+diffs/
+*.tmp
