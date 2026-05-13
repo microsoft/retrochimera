@@ -88,9 +88,33 @@ class RetroChimeraModel(ExternalBackwardReactionModel):
     def _get_reactions(
         self, inputs: list[Molecule], num_results: int
     ) -> list[Sequence[SingleProductReaction]]:
-        model_batch_results: list[list[Sequence[SingleProductReaction]]] = [
-            model(inputs=inputs, num_results=num_results) for model in self._models
-        ]
+        # OPT: run the constituent models concurrently. With a single shared CUDA device
+        # we use one CUDA stream per model so kernel launches can overlap (the loc branch
+        # finishes ~30 ms while the transformer needs ~470 ms; running them in parallel
+        # buys back the loc cost). All Python post-processing inside each model still
+        # runs on its own thread.
+        if len(self._models) > 1 and torch.cuda.is_available():
+            from concurrent.futures import ThreadPoolExecutor
+
+            streams = [torch.cuda.Stream() for _ in self._models]
+
+            def _run(idx_model_stream):
+                idx, model, stream = idx_model_stream
+                with torch.cuda.stream(stream):
+                    out = model(inputs=inputs, num_results=num_results)
+                stream.synchronize()
+                return idx, out
+
+            with ThreadPoolExecutor(max_workers=len(self._models)) as ex:
+                results = list(
+                    ex.map(_run, [(i, m, s) for i, (m, s) in enumerate(zip(self._models, streams))])
+                )
+            results.sort(key=lambda x: x[0])
+            model_batch_results: list[list[Sequence[SingleProductReaction]]] = [r for _, r in results]
+        else:
+            model_batch_results = [
+                model(inputs=inputs, num_results=num_results) for model in self._models
+            ]
 
         return [
             combine_results(
