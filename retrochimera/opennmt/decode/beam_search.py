@@ -244,7 +244,7 @@ class BeamSearch(DecodeStrategy):
                     self.hypotheses[b].append(
                         (
                             topk_scores_cpu[i, j],
-                            predictions[i, j, 1:],  # Ignore start_token.
+                            predictions_cpu[i, j, 1:],  # Ignore start_token. CPU view.
                             attention[:, i, j, : self.memory_lengths[i]]
                             if attention is not None
                             else None,
@@ -258,7 +258,7 @@ class BeamSearch(DecodeStrategy):
                         self.hypotheses[b].append(
                             (
                                 topk_scores_cpu[i, j],
-                                predictions[i, j, 1:],  # Ignore start_token.
+                                predictions_cpu[i, j, 1:],  # Ignore start_token. CPU view.
                                 attention[:, i, j, : self.memory_lengths[i]]
                                 if attention is not None
                                 else None,
