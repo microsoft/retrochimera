@@ -220,20 +220,30 @@ class BeamSearch(DecodeStrategy):
             if self.alive_attn is not None
             else None
         )
+
+        # OPT: snapshot the GPU tensors that the per-(batch, beam) Python loop and the
+        # subsequent `sorted(self.hypotheses[b], key=lambda x: x[0])` reach into element-wise.
+        # Without this, every `predictions[i, j, -2] != self.eos` and every score comparison
+        # in `sorted(...)` triggers an implicit .item() / DtoH sync — observed in the profile
+        # as ~220k aten::_local_scalar_dense calls (~1.7s of CPU). One bulk DtoH per call
+        # replaces all of them.
+        predictions_cpu = predictions.to("cpu", non_blocking=False)
+        topk_scores_cpu = self.topk_scores.to("cpu", non_blocking=False)
+        is_finished_cpu = self.is_finished  # already CPU
         non_finished_batch = []
-        for i in range(self.is_finished.size(0)):  # Batch level
+        for i in range(is_finished_cpu.size(0)):  # Batch level
             b = self._batch_offset[i]
-            finished_hyp = self.is_finished[i].nonzero(as_tuple=False).view(-1)
+            finished_hyp = is_finished_cpu[i].nonzero(as_tuple=False).view(-1).tolist()
             # Store finished hypotheses for this batch.
             for j in finished_hyp:  # Beam level: finished beam j in batch i
                 if self.ratio > 0:
-                    s = self.topk_scores[i, j] / (step + 1)
+                    s = topk_scores_cpu[i, j] / (step + 1)
                     if self.best_scores[b] < s:
                         self.best_scores[b] = s
                 if not self.customised_beam_search:
                     self.hypotheses[b].append(
                         (
-                            self.topk_scores[i, j],
+                            topk_scores_cpu[i, j],
                             predictions[i, j, 1:],  # Ignore start_token.
                             attention[:, i, j, : self.memory_lengths[i]]
                             if attention is not None
@@ -241,10 +251,13 @@ class BeamSearch(DecodeStrategy):
                         )
                     )
                 else:
-                    if predictions[i, j, 1:].size(-1) == 0 or predictions[i, j, -2] != self.eos:
+                    if (
+                        predictions_cpu[i, j, 1:].size(-1) == 0
+                        or predictions_cpu[i, j, -2].item() != self.eos
+                    ):
                         self.hypotheses[b].append(
                             (
-                                self.topk_scores[i, j],
+                                topk_scores_cpu[i, j],
                                 predictions[i, j, 1:],  # Ignore start_token.
                                 attention[:, i, j, : self.memory_lengths[i]]
                                 if attention is not None
@@ -256,13 +269,13 @@ class BeamSearch(DecodeStrategy):
             if self.ratio > 0:
                 pred_len = self.memory_lengths[i] * self.ratio
                 finish_flag = (
-                    (self.topk_scores[i, 0] / pred_len) <= self.best_scores[b]
-                ) or self.is_finished[i].all()
+                    (topk_scores_cpu[i, 0] / pred_len) <= self.best_scores[b]
+                ) or bool(is_finished_cpu[i].all())
             else:
                 if not self.customised_beam_search:
                     finish_flag = self.top_beam_finished[i] != 0
                 else:
-                    finish_flag = self.is_finished[i].all()  # shape: (beam_size,)
+                    finish_flag = bool(is_finished_cpu[i].all())  # shape: (beam_size,)
 
             if finish_flag and len(self.hypotheses[b]) >= self.n_best:
                 best_hyp = sorted(self.hypotheses[b], key=lambda x: x[0], reverse=True)
