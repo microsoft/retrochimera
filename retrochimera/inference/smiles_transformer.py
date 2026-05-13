@@ -189,7 +189,13 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
         batch["src"] = src  # tuple[Tensor, Tensor]: (padded_src_len, batch_size, 1), (batch_size,)
         batch["batch_size"] = batch_size
 
-        translate_results = translator.translate_batch(batch, attn_debug=False)
+        from retrochimera._inference_flags import autocast_dtype
+        _ac_dtype = autocast_dtype()
+        if _ac_dtype is not None:
+            with torch.autocast(device_type="cuda", dtype=_ac_dtype):
+                translate_results = translator.translate_batch(batch, attn_debug=False)
+        else:
+            translate_results = translator.translate_batch(batch, attn_debug=False)
         augmented_batch_output_token_ids = translate_results[
             "predictions"
         ]  # list[list[LongTensor]]: For each batch, holds a list of beam prediction sequences
