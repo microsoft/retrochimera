@@ -96,7 +96,14 @@ class RetroChimeraModel(ExternalBackwardReactionModel):
         if len(self._models) > 1 and torch.cuda.is_available():
             from concurrent.futures import ThreadPoolExecutor
 
-            streams = [torch.cuda.Stream() for _ in self._models]
+            # OPT(cache_streams_executor): create CUDA streams + thread pool once,
+            # rather than per call. At B=1 this is per-molecule overhead.
+            if not hasattr(self, "_cached_streams"):
+                self._cached_streams = [torch.cuda.Stream() for _ in self._models]
+                self._cached_executor = ThreadPoolExecutor(max_workers=len(self._models))
+
+            streams = self._cached_streams
+            ex = self._cached_executor
 
             def _run(idx_model_stream):
                 idx, model, stream = idx_model_stream
@@ -105,10 +112,9 @@ class RetroChimeraModel(ExternalBackwardReactionModel):
                 stream.synchronize()
                 return idx, out
 
-            with ThreadPoolExecutor(max_workers=len(self._models)) as ex:
-                results = list(
-                    ex.map(_run, [(i, m, s) for i, (m, s) in enumerate(zip(self._models, streams))])
-                )
+            results = list(
+                ex.map(_run, [(i, m, s) for i, (m, s) in enumerate(zip(self._models, streams))])
+            )
             results.sort(key=lambda x: x[0])
             model_batch_results: list[list[Sequence[SingleProductReaction]]] = [r for _, r in results]
         else:
