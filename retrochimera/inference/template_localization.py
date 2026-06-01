@@ -99,21 +99,25 @@ class TemplateLocalizationModel(RuleBasedRetrosynthesizer, ExternalBackwardReact
             get_sorted_ids_and_probs(batch_rule_logits, k=top_k)
         ):
             input_graph_atom_outputs = torch.t(input_graphs_atom_outputs[input_graphs.batch == idx])
+
+            lhs_chunks = [self.all_rewrites_atom_outputs_list[rule_id] for rule_id in rule_ids]
+            chunk_sizes = [c.size(0) for c in lhs_chunks]
+
+            all_scores = torch.mm(torch.cat(lhs_chunks, dim=0), input_graph_atom_outputs)
+            all_scores = torch.nn.functional.log_softmax(all_scores, dim=-1)
+            all_scores_list = tensor_to_list(all_scores)
+
+            offset = 0
             graph_results = []
-
-            for rule_id, rule_prob in zip(rule_ids, rule_probs):
-                localization_scores = torch.mm(
-                    self.all_rewrites_atom_outputs_list[rule_id], input_graph_atom_outputs
-                )
-                localization_scores = torch.nn.functional.log_softmax(localization_scores, dim=-1)
-
+            for rule_id, rule_prob, chunk_size in zip(rule_ids, rule_probs, chunk_sizes):
                 graph_results.append(
                     RulePrediction(
                         id=rule_id,
                         prob=rule_prob,
-                        localization_scores=tensor_to_list(localization_scores),
+                        localization_scores=all_scores_list[offset : offset + chunk_size],
                     )
                 )
+                offset += chunk_size
 
             results.append(graph_results)
 
