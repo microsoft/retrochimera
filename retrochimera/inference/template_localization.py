@@ -49,12 +49,12 @@ class TemplateLocalizationModel(RuleBasedRetrosynthesizer, ExternalBackwardReact
         assert self.model.all_rewrites_atom_outputs is not None
         assert self.model.all_rewrites_batch_idx is not None
 
-        # Unpack the rewrite atom outputs for convenience.
-        self.all_rewrites_atom_outputs_list: list[torch.Tensor] = []
-        for rule_id in range(self.model.n_classes):
-            self.all_rewrites_atom_outputs_list.append(
-                self.model.all_rewrites_atom_outputs[self.model.all_rewrites_batch_idx == rule_id]
-            )
+        # Unpack the rewrite atom outputs by rule ID. The `batch_idx` tensor is sorted, so we find
+        # group boundaries with `unique_consecutive` and then split.
+        _, counts = torch.unique_consecutive(self.model.all_rewrites_batch_idx, return_counts=True)
+        self.all_rewrites_atom_outputs_list: list[torch.Tensor] = list(
+            torch.split(self.model.all_rewrites_atom_outputs, counts.tolist())
+        )
 
     @property
     def _rule_application_server_kwargs(self) -> dict[str, Any]:
