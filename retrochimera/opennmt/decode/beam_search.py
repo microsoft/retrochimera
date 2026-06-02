@@ -264,9 +264,9 @@ class BeamSearch(DecodeStrategy):
             # n_best hypotheses.
             if self.ratio > 0:
                 pred_len = self.memory_lengths[i] * self.ratio
-                finish_flag = (
-                    (topk_scores_cpu[i, 0] / pred_len) <= self.best_scores[b]
-                ) or bool(self.is_finished[i].all())
+                finish_flag = ((topk_scores_cpu[i, 0] / pred_len) <= self.best_scores[b]) or bool(
+                    self.is_finished[i].all()
+                )
             else:
                 if not self.customised_beam_search:
                     finish_flag = self.top_beam_finished[i] != 0

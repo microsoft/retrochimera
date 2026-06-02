@@ -190,10 +190,9 @@ class Translator(object):
 
         memory_bank_bt = memory_bank.transpose(0, 1).contiguous()
         src_pad_len = memory_bank_bt.size(1)
-        memory_padding_mask = (
-            torch.arange(0, src_pad_len, device=memory_bank_bt.device)
-            >= memory_lengths.unsqueeze(1)
-        )
+        memory_padding_mask = torch.arange(
+            0, src_pad_len, device=memory_bank_bt.device
+        ) >= memory_lengths.unsqueeze(1)
 
         complete_seq_log_prob = None
         if self.customised_beam_search:
