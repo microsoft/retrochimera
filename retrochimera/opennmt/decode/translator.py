@@ -14,6 +14,7 @@ Modifications:
 2. Refactored the `_run_encoder`, `_decode_and_generate`, and `_translate_batch_with_strategy` methods to align with the `retrochimera.models.smiles_transformer.SmilesTransformerModel` class.
 3. Introduced the `customised_beam_search` attribute and corresponding logic to the `Translator` class, enabling optimized beam search for retrosynthesis prediction.
 4. Switched `torch.no_grad()` to `torch.inference_mode()` for better performance.
+5. Optimized code for more efficient tensor operations and memory usage.
 """
 from typing import Any, Optional
 
@@ -187,6 +188,14 @@ class Translator(object):
         if fn_map_state is not None:
             self.model.decoder.map_state(fn_map_state, only_map_src=True)
 
+        complete_seq_log_prob = None
+        if self.customised_beam_search:
+            vocab_size = self._tgt_vocab_len
+            complete_seq_log_prob = torch.full(
+                (1, vocab_size), -1e5, device=memory_bank.device, dtype=torch.float32
+            )
+            complete_seq_log_prob[:, self._tgt_eos_idx] = 0.0
+
         # (3) Begin decoding step by step:
         for step in range(decode_strategy.max_length):
             decoder_input = decode_strategy.current_predictions.view(
@@ -206,14 +215,6 @@ class Translator(object):
 
             if self.customised_beam_search:
                 # modify the log_probs for finished sentences.
-                _, vocab_size = tuple(log_probs.shape)
-                bad_token_log_prob = -1e5
-
-                complete_seq_log_prob = (torch.ones((1, vocab_size)) * bad_token_log_prob).to(
-                    log_probs.device
-                )  # shape: (1, vocab_size)
-                complete_seq_log_prob[:, self._tgt_eos_idx] = 0.0  # shape: (1, vocab_size)
-
                 # Use this vector in the output for sequences which are complete.
                 is_end_token = (
                     decoder_input.squeeze() == self._tgt_eos_idx
