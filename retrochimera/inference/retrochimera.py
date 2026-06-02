@@ -1,6 +1,7 @@
 import itertools
 import json
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Optional, Sequence, Union
 
@@ -55,6 +56,14 @@ class RetroChimeraModel(ExternalBackwardReactionModel):
         self._init_from_dir(model_dir=model_dir, model_data=model_data, model_kwargs=model_kwargs)
         self.probability_from_score_temperature = probability_from_score_temperature
 
+        # Set up CUDA streams to allow executing submodels in parallel.
+        self._cached_streams: Optional[list[torch.cuda.Stream]] = None
+        self._cached_executor: Optional[ThreadPoolExecutor] = None
+
+        if len(self._models) > 1 and self.device.startswith("cuda"):
+            self._cached_streams = [torch.cuda.Stream() for _ in self._models]
+            self._cached_executor = ThreadPoolExecutor(max_workers=len(self._models))
+
     def _load_model_data_from_dir(self, model_dir: Path) -> dict[str, tuple[str, list[float]]]:
         with open(model_dir / "models.json") as f:
             return json.load(f)
@@ -88,9 +97,21 @@ class RetroChimeraModel(ExternalBackwardReactionModel):
     def _get_reactions(
         self, inputs: list[Molecule], num_results: int
     ) -> list[Sequence[SingleProductReaction]]:
-        model_batch_results: list[list[Sequence[SingleProductReaction]]] = [
-            model(inputs=inputs, num_results=num_results) for model in self._models
-        ]
+        if self._cached_streams is not None and self._cached_executor is not None:
+
+            def _run(model, stream):
+                with torch.cuda.stream(stream):
+                    out = model(inputs=inputs, num_results=num_results)
+                stream.synchronize()
+                return out
+
+            model_batch_results = list(
+                self._cached_executor.map(_run, self._models, self._cached_streams)
+            )
+        else:
+            model_batch_results = [
+                model(inputs=inputs, num_results=num_results) for model in self._models
+            ]
 
         return [
             combine_results(
