@@ -631,14 +631,7 @@ class TransformerDecoder(TransformerDecoderBase):
                 )
 
         dec_out = tgt
-        src_len = enc_key_padding_mask.eq(0).sum(dim=1).long()  # shape: (batch_size,)
-        src_max_len = self.state["src"].shape[
-            0
-        ]  # self.state["src"] shape: (padded_src_len, batch_size, 1)
-
-        src_pad_mask = sequence_mask(src_len, src_max_len).unsqueeze(
-            1
-        )  # shape: (batch_size, 1, padded_src_len)
+        src_pad_mask = enc_key_padding_mask.unsqueeze(1)  # shape: (batch_size, 1, padded_src_len)
         tgt_pad_mask = tgt_key_padding_mask.unsqueeze(1)  # shape: (batch_size, 1, padded_tgt_len/1)
 
         with_align = kwargs.pop("with_align", False)
