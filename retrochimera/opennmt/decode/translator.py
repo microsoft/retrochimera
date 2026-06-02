@@ -13,6 +13,7 @@ Modifications:
 1. Simplified the structure by removing the `build_translator` function, and merged the `Inference` class into the `Translator` class.
 2. Refactored the `_run_encoder`, `_decode_and_generate`, and `_translate_batch_with_strategy` methods to align with the `retrochimera.models.smiles_transformer.SmilesTransformerModel` class.
 3. Introduced the `customised_beam_search` attribute and corresponding logic to the `Translator` class, enabling optimized beam search for retrosynthesis prediction.
+4. Switched `torch.no_grad()` to `torch.inference_mode()` for better performance.
 """
 from typing import Any, Optional
 
@@ -114,7 +115,7 @@ class Translator(object):
                 - src_lengths (torch.Tensor): shape of src_lengths: (batch_size,)
             - batch_size: int
         """
-        with torch.no_grad():
+        with torch.inference_mode():
             # TODO: support these blacklisted features
             decode_strategy = BeamSearch(
                 pad=self._tgt_pad_idx,
