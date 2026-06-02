@@ -219,8 +219,8 @@ class Translator(object):
                     decoder_input.squeeze() == self._tgt_eos_idx
                 )  # shape: (batch_size * beam_size,)
                 log_prob_mask = is_end_token.unsqueeze(1)  # shape: (batch_size * beam_size, 1)
-                log_probs = (log_prob_mask * complete_seq_log_prob) + (
-                    ~log_prob_mask * log_probs
+                log_probs = torch.where(
+                    log_prob_mask, complete_seq_log_prob, log_probs
                 )  # shape: (batch_size * beam_size, vocab_size)
 
                 assert log_probs.dim() == 2, f"Expected 2D tensor, got {log_probs.dim()}"
