@@ -12,7 +12,10 @@ from syntheseus.interface.reaction import ReactionMetaData
 from syntheseus.reaction_prediction.inference_base import ExternalBackwardReactionModel
 
 from retrochimera import inference
+from retrochimera.utils.logging import get_logger
 from retrochimera.utils.misc import lookup_by_name
+
+logger = get_logger(__name__)
 
 
 class RetroChimeraModel(ExternalBackwardReactionModel):
@@ -23,6 +26,7 @@ class RetroChimeraModel(ExternalBackwardReactionModel):
         *args,
         model_dir: Optional[Union[str, Path]] = None,
         probability_from_score_temperature: float = 8.0,
+        call_submodels_in_parallel: bool = True,
         **kwargs,
     ) -> None:
         """Initializes the RetroChimera model wrapper.
@@ -55,14 +59,23 @@ class RetroChimeraModel(ExternalBackwardReactionModel):
 
         self._init_from_dir(model_dir=model_dir, model_data=model_data, model_kwargs=model_kwargs)
         self.probability_from_score_temperature = probability_from_score_temperature
+        self._call_submodels_in_parallel = call_submodels_in_parallel
+
+        if not self._models:
+            raise RuntimeError(f"No submodels found in {model_dir}")
 
         # Set up CUDA streams to allow executing submodels in parallel.
         self._cached_streams: Optional[list[torch.cuda.Stream]] = None
         self._cached_executor: Optional[ThreadPoolExecutor] = None
 
-        if len(self._models) > 1 and self.device.startswith("cuda"):
-            self._cached_streams = [torch.cuda.Stream() for _ in self._models]
-            self._cached_executor = ThreadPoolExecutor(max_workers=len(self._models))
+        if call_submodels_in_parallel and len(self._models) > 1:
+            if self.device.startswith("cuda"):
+                self._cached_streams = [torch.cuda.Stream() for _ in self._models]
+                self._cached_executor = ThreadPoolExecutor(max_workers=len(self._models))
+            else:
+                logger.warning(
+                    f"Submodels will run sequentially as chosen device is not CUDA ({self.device})"
+                )
 
     def _load_model_data_from_dir(self, model_dir: Path) -> dict[str, tuple[str, list[float]]]:
         with open(model_dir / "models.json") as f:
