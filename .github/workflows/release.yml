@@ -63,3 +63,19 @@ jobs:
         with:
           name: dist
           path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/retrochimera
+    permissions:
+      id-token: write  # Required for OIDC trusted publishing to PyPI.
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
