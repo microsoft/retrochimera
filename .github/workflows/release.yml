@@ -10,6 +10,8 @@ on:
 jobs:
   push-tag:
     runs-on: ubuntu-latest
+    # Only allow releases from main.
+    if: github.ref == 'refs/heads/main'
     permissions:
       contents: write
     env:
