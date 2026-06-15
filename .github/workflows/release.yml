@@ -13,12 +13,22 @@ permissions:
 jobs:
   push-tag:
     runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ inputs.version }}
     steps:
       - uses: actions/checkout@v4
+      - name: Validate version
+        # Reject anything that is not in the `x.y.z` format.
+        run: |
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Version '$VERSION' is not in the x.y.z format."
+            exit 1
+          fi
       - name: Configure Git
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-      - run: |
-          git tag -a v${{ inputs.version }} -m "Release v${{ inputs.version }}"
-          git push origin v${{ inputs.version }}
+      - name: Create and push tag
+        run: |
+          git tag -a "v$VERSION" -m "Release v$VERSION"
+          git push origin "v$VERSION"
