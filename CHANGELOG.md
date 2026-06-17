@@ -7,6 +7,8 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-06-17
+
 ### Changed
 
 - Speed up localization model loading and inference ([#15](https://github.com/microsoft/retrochimera/pull/15), [#16](https://github.com/microsoft/retrochimera/pull/16)) ([@kmaziarz])
@@ -34,8 +36,9 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 :seedling: Initial public release.
 
-[Unreleased]: https://github.com/microsoft/retrochimera/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/microsoft/retrochimera/compare/v1.2.0...HEAD
 [1.0.0]: https://github.com/microsoft/retrochimera/releases/tag/v1.0.0
 [1.1.0]: https://github.com/microsoft/retrochimera/releases/tag/v1.1.0
+[1.2.0]: https://github.com/microsoft/retrochimera/releases/tag/v1.2.0
 
 [@kmaziarz]: https://github.com/kmaziarz
