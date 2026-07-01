@@ -110,7 +110,7 @@ def test_augment_rsmiles(processed_output_dir: Path, augmented_output_dir: Path)
         ],
     )
 
-    for (path_input, path_output) in [
+    for path_input, path_output in [
         (processed_output_dir / "train.jsonl", augmented_output_dir / "train" / "train.jsonl"),
         (processed_output_dir / "val.jsonl", augmented_output_dir / "val" / "val.jsonl"),
     ]:
@@ -168,6 +168,7 @@ def test_preprocess_and_train(
     extra_model_kwargs: dict[str, Any],
     tmp_path: Path,
     processed_output_dir: Path,
+    split_output_dir: Path,
 ) -> None:
     """Test the end-to-end reaction prediction pipeline for various model classes."""
     model_class = testcase.split("[")[0]
@@ -232,29 +233,9 @@ def test_preprocess_and_train(
     # Append any extra, test-specific kwargs.
     model_kwargs.extend([f"{train_config_key}.{k}={v}" for k, v in extra_model_kwargs.items()])
 
-    preprocess_args = model_kwargs + [
-        f"data_dir={processed_output_dir}",
-        f"processed_data_dir={featurized_output_dir}",
-        "rulebase_min_rule_support=2",
-        "num_processes_preprocessing=1",
-    ]
-
-    n_epochs = 450 if model_class == "SmilesTransformer" else 200
-    train_args = model_kwargs + [
-        f"processed_data_dir={featurized_output_dir}",
-        f"checkpoint_dir={checkpoint_dir}",
-        f"log_dir={log_dir}",
-        f"{train_config_key}.training.n_epochs={n_epochs}",
-        f"{train_config_key}.training.learning_rate=0.001",
-        f"{train_config_key}.training.learning_rate_decay_step_size={n_epochs // 2}",
-        f"{train_config_key}.training.check_val_every_n_epoch=50",
-        f"{train_config_key}.training.num_checkpoints_for_averaging=2",
-        f"{train_config_key}.training.accelerator=cpu",
-        f"{train_config_key}.training.gradient_clip_val=50.0",
-        f"{train_config_key}.training.accumulate_grad_batches=1",
-    ]
-
     extra_args = []
+    vocab_args: list[str] = []
+
     if model_class == "SmilesTransformer":
         featurized_output_dir.mkdir()
         vocab_output_path = featurized_output_dir / "vocab.txt"
@@ -266,21 +247,66 @@ def test_preprocess_and_train(
 
         assert vocab_output_path.exists()
 
-        vocab_arg = f"{train_config_key}.vocab_path={vocab_output_path}"
-        train_args += [vocab_arg]
-        preprocess_args += [vocab_arg]
+        # Reuse the same vocabulary across pretraining and fine-tuning preprocessing/training.
+        vocab_args = [f"{train_config_key}.vocab_path={vocab_output_path}"]
 
         # We did not apply augmentation to the training data, so turn it off for eval.
         extra_args += ["model_kwargs={'augmentation_size': 1}"]
 
-    run_with_python(path="./retrochimera/cli/preprocess.py", args=preprocess_args)
+    n_epochs = 450 if model_class == "SmilesTransformer" else 200
+
+    def run_preprocess(data_dir: Path, processed_data_dir: Path) -> None:
+        run_with_python(
+            path="./retrochimera/cli/preprocess.py",
+            args=(
+                model_kwargs
+                + [
+                    f"data_dir={data_dir}",
+                    f"processed_data_dir={processed_data_dir}",
+                    "rulebase_min_rule_support=2",
+                    "num_processes_preprocessing=1",
+                ]
+                + vocab_args
+            ),
+        )
+
+    def run_train(
+        processed_data_dir: Path,
+        checkpoint_dir: Path,
+        log_dir: Path,
+        check_val_every_n_epoch: int = 50,
+        extra: Optional[list[str]] = None,
+    ) -> None:
+        run_with_python(
+            path="./retrochimera/cli/train.py",
+            args=(
+                model_kwargs
+                + [
+                    f"processed_data_dir={processed_data_dir}",
+                    f"checkpoint_dir={checkpoint_dir}",
+                    f"log_dir={log_dir}",
+                    f"{train_config_key}.training.n_epochs={n_epochs}",
+                    f"{train_config_key}.training.learning_rate=0.001",
+                    f"{train_config_key}.training.learning_rate_decay_step_size={n_epochs // 2}",
+                    f"{train_config_key}.training.check_val_every_n_epoch={check_val_every_n_epoch}",
+                    f"{train_config_key}.training.num_checkpoints_for_averaging=2",
+                    f"{train_config_key}.training.accelerator=cpu",
+                    f"{train_config_key}.training.gradient_clip_val=50.0",
+                    f"{train_config_key}.training.accumulate_grad_batches=1",
+                ]
+                + vocab_args
+                + (extra or [])
+            ),
+        )
+
+    run_preprocess(processed_output_dir, featurized_output_dir)
 
     # Test data is composed of reactions for three most common templates in USPTO-50K, plus some
     # extra reactions using uncommon templates; the latter should get filtered out.
     assert get_num_lines(featurized_output_dir / "template_lib.json") == 3
     assert (featurized_output_dir / "data.h5").exists()
 
-    run_with_python(path="./retrochimera/cli/train.py", args=train_args)
+    run_train(featurized_output_dir, checkpoint_dir, log_dir)
 
     # As many best checkpoints as specified via `num_checkpoints_for_averaging`.
     assert get_num_files(checkpoint_dir / "best") == 2
@@ -295,15 +321,75 @@ def test_preprocess_and_train(
         extra_args=extra_args,
     )
 
+    # Next, test that the pretrained checkpoint can be fine-tuned on `pista_test.smi`.
+    finetune_split_dir = tmp_path / f"finetune_split_{testcase}"
+    finetune_split_dir.mkdir()
+    test_reactions = (split_output_dir / "pista_test.smi").read_text().splitlines()
+    for split_fold in ["train", "val", "test"]:
+        (finetune_split_dir / f"pista_{split_fold}.smi").write_text(
+            "\n".join(test_reactions) + "\n"
+        )
 
-def check_model_eval(
+    finetune_processed_dir = tmp_path / f"finetune_processed_{testcase}"
+    run_with_python(
+        path="./retrochimera/cli/extract_templates.py",
+        args=[f"data_dir={finetune_split_dir}", f"output_dir={finetune_processed_dir}"],
+    )
+
+    finetune_train_path = finetune_processed_dir / "train.jsonl"
+    finetune_lines = finetune_train_path.read_text().splitlines(keepends=True)[:NUM_SAMPLES]
+    finetune_train_path.write_text("".join(finetune_lines))
+    for split_fold in ["val", "test"]:
+        shutil.copy(finetune_train_path, finetune_processed_dir / f"{split_fold}.jsonl")
+
+    # Check how well the pretrained model already does on the held-out reactions.
+    pretrained_results = run_eval(
+        eval_model_class=eval_model_class,
+        model_dir=checkpoint_dir,
+        data_dir=finetune_processed_dir,
+        eval_results_dir=tmp_path / f"finetune_eval_pretrained_{testcase}",
+        extra_args=extra_args,
+    )
+
+    finetune_featurized_dir = tmp_path / f"finetune_featurized_{testcase}"
+    finetune_checkpoint_dir = tmp_path / f"finetune_checkpoint_{testcase}"
+
+    run_preprocess(finetune_processed_dir, finetune_featurized_dir)
+
+    # The held-out reactions yield a different template library than the pretraining data, so
+    # fine-tuning rebuilds the model's prediction head for a new label space.
+    assert (finetune_featurized_dir / "template_lib.json").read_text() != (
+        featurized_output_dir / "template_lib.json"
+    ).read_text()
+
+    run_train(
+        finetune_featurized_dir,
+        finetune_checkpoint_dir,
+        tmp_path / f"finetune_logs_{testcase}",
+        check_val_every_n_epoch=n_epochs // 2,
+        extra=[f"finetune_checkpoint_path={checkpoint_dir / 'combined.ckpt'}"],
+    )
+
+    finetuned_results = run_eval(
+        eval_model_class=eval_model_class,
+        model_dir=finetune_checkpoint_dir,
+        data_dir=finetune_processed_dir,
+        eval_results_dir=tmp_path / f"finetune_eval_finetuned_{testcase}",
+        extra_args=extra_args,
+    )
+
+    # Fine-tuning should improve accuracy on the held-out reactions.
+    assert finetuned_results["top_k"][0] > pretrained_results["top_k"][0]
+
+
+def run_eval(
     eval_model_class: str,
     model_dir: Path,
     data_dir: Path,
     eval_results_dir: Path,
     extra_args: Optional[list[str]] = None,
-) -> None:
-    """Run model evaluation and check the results."""
+) -> dict[str, Any]:
+    """Run model evaluation and return the parsed results."""
     eval_args = [
         f"model_class={eval_model_class}",
         f"model_dir={model_dir}",
@@ -323,6 +409,19 @@ def check_model_eval(
     assert eval_results["eval_args"]["model_class"] == f"{eval_model_class}Model"
     assert eval_results["eval_args"]["fold"] == "TEST"
     assert eval_results["num_samples"] == NUM_SAMPLES
+
+    return eval_results
+
+
+def check_model_eval(
+    eval_model_class: str,
+    model_dir: Path,
+    data_dir: Path,
+    eval_results_dir: Path,
+    extra_args: Optional[list[str]] = None,
+) -> None:
+    """Run model evaluation and check the results."""
+    eval_results = run_eval(eval_model_class, model_dir, data_dir, eval_results_dir, extra_args)
 
     # In this example, all template-based are capped at ~90% due to a small fraction of examples
     # using out-of-library templates. They should however be able to overfit the rest.
