@@ -1,5 +1,6 @@
 from typing import Any
 
+import pytorch_lightning as pl
 from pytorch_lightning import callbacks as pl_callbacks
 from pytorch_lightning.callbacks import Callback
 
@@ -64,3 +65,28 @@ class ModelCheckpoint(pl_callbacks.ModelCheckpoint):
                 state_dict[key] = new_value
 
         super().load_state_dict(state_dict)
+
+
+class UnfreezeCallback(Callback):
+    """Callback to unfreeze pretrained parameters after warmup epochs."""
+
+    def __init__(self, frozen_param_names: set[str], warmup_epochs: int) -> None:
+        self.frozen_param_names = frozen_param_names
+        self.warmup_epochs = warmup_epochs
+        self._unfrozen = False
+
+    def on_train_epoch_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+        if self._unfrozen:
+            return
+
+        if trainer.current_epoch >= self.warmup_epochs:
+            unfrozen_count = 0
+            for name, param in pl_module.named_parameters():
+                if name in self.frozen_param_names:
+                    param.requires_grad = True
+                    unfrozen_count += param.numel()
+
+            logger.info(
+                f"Epoch {trainer.current_epoch}: Unfroze {unfrozen_count:,} pretrained parameters"
+            )
+            self._unfrozen = True
