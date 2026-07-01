@@ -557,3 +557,19 @@ class TemplateLocalizationModel(AbstractModel[TemplateReactionSample, ProcessedS
                 "all_rewrites_atom_outputs",
             ]:
                 checkpoint[key] = getattr(self, key).detach().cpu()
+
+    def get_nontransferable_param_prefixes(self) -> list[str]:
+        prefixes = [
+            "free_rewrite_embeddings",
+            "all_rewrites_batch_idx",
+            "all_rewrites_mol_outputs",
+            "all_rewrites_atom_outputs",
+        ]
+
+        # Add rewrite_encoder's non-transferable prefixes
+        if self.rewrite_encoder.atom_categorical_features_emb is not None:
+            prefixes.append("rewrite_encoder.atom_categorical_features_emb.")
+        else:
+            prefixes.append("rewrite_encoder.gnn.convs.0.")
+
+        return prefixes

@@ -91,3 +91,77 @@ def average_checkpoints(input_paths: list[Union[str, Path]], output_path: Union[
 
     with open(output_path, "wb") as f:
         torch.save(combined_checkpoint, f)
+
+
+def load_pretrained_weights(
+    model: AbstractModel, checkpoint_path: Union[str, Path], nontransferable_prefixes: list[str]
+) -> set[str]:
+    """Load pretrained weights into a model, skipping non-transferable parameters.
+
+    Args:
+        model: The model to load weights into.
+        checkpoint_path: Path to the pretrained checkpoint file.
+        nontransferable_prefixes: List of parameter name prefixes to skip.
+
+    Returns:
+        Set of parameter names that were successfully loaded.
+    """
+    with open(checkpoint_path, "rb") as f:
+        checkpoint = torch.load(f, map_location="cpu")
+
+    pretrained_state_dict = checkpoint["state_dict"]
+    model_state_dict = model.state_dict()
+
+    loaded_keys: set[str] = set()
+    skipped_prefix_keys: set[str] = set()
+
+    for key in pretrained_state_dict.keys():
+        should_skip = any(key.startswith(prefix) for prefix in nontransferable_prefixes)
+        if should_skip:
+            skipped_prefix_keys.add(key)
+            continue
+
+        model_state_dict[key] = pretrained_state_dict[key]
+        loaded_keys.add(key)
+
+    # Load the modified state dict
+    model.load_state_dict(model_state_dict)
+
+    logger.info("Loaded %d parameters from pretrained checkpoint", len(loaded_keys))
+    if skipped_prefix_keys:
+        logger.info(
+            "Skipped %d parameters due to non-transferable prefixes", len(skipped_prefix_keys)
+        )
+
+    return loaded_keys
+
+
+def freeze_pretrained_layers(model: AbstractModel, loaded_param_names: set[str]) -> None:
+    """Freeze parameters that were loaded from a pretrained checkpoint.
+
+    This sets `requires_grad=False` for all parameters that were successfully loaded, so that only
+    the non-transferred (newly initialized) parameters will be trained.
+
+    Args:
+        model: The model whose parameters to freeze.
+        loaded_param_names: Set of parameter names that were loaded from pretrained checkpoint.
+    """
+    frozen_count = 0
+    trainable_count = 0
+
+    for name, param in model.named_parameters():
+        if name in loaded_param_names:
+            param.requires_grad = False
+            frozen_count += param.numel()
+        elif param.requires_grad:
+            trainable_count += param.numel()
+        else:
+            # This parameter was not loaded but is already frozen, which is unusual and worth logging
+            logger.warning(
+                "Parameter %s was not loaded from pretrained checkpoint, but is already frozen",
+                name,
+            )
+
+    logger.info(
+        f"Froze {frozen_count:,} pretrained parameters, {trainable_count:,} parameters remain trainable"
+    )

@@ -107,3 +107,8 @@ class MCCModel(AbstractModel[TemplateReactionSample, ProcessedSample, Batch]):
             inputs=self.encoder.collate([sample.input for sample in samples]),
             targets=torch.as_tensor([sample.target for sample in samples], dtype=torch.long),
         )
+
+    def get_nontransferable_param_prefixes(self) -> list[str]:
+        # Extract the index of the last linear layer, which is the one that depends on `n_classes`
+        output_layer_idx = 3 * (self.n_hidden_layers + 1)
+        return [f"mlp.mlp.{output_layer_idx}."]
