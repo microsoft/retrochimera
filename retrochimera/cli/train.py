@@ -31,8 +31,12 @@ from retrochimera.models.template_classification import MCCModel
 from retrochimera.models.template_localization import TemplateLocalizationModel
 from retrochimera.utils.logging import get_logger
 from retrochimera.utils.misc import convert_camel_to_snake, lookup_by_name
-from retrochimera.utils.pytorch_lightning import ModelCheckpoint, OptLRMonitor
-from retrochimera.utils.training import average_checkpoints
+from retrochimera.utils.pytorch_lightning import ModelCheckpoint, OptLRMonitor, UnfreezeCallback
+from retrochimera.utils.training import (
+    average_checkpoints,
+    freeze_pretrained_layers,
+    load_pretrained_weights,
+)
 
 logger = get_logger(__name__)
 
@@ -46,6 +50,12 @@ Required arguments:
   preset              Selects a configuration from 'pistachio' (default), 'uspto_full', 'uspto_50k'.
   processed_data_dir  Directory containing the processed data.
   checkpoint_dir      Directory where model checkpoints will be saved.
+
+Optional arguments:
+  finetune_checkpoint_path  Path to a pretrained checkpoint for fine-tuning. When specified,
+                            the model will load transferable weights from this checkpoint and
+                            freeze them, training only the vocabulary-dependent layers (e.g.,
+                            token embeddings, output projections, template-specific parameters).
 
 Optionally you can provide one or several paths to YAML config files to override the preset via the
 'config' argument. Any config key can also be overridden directly from the CLI with key=value pairs.
@@ -185,6 +195,10 @@ class TrainConfig(ModelTrainingConfig):
 
     num_processes_training: int = 1  # Number of processes to use for training
 
+    # Fine-tuning options
+    finetune_checkpoint_path: Optional[str] = None  # Path to pretrained checkpoint for fine-tuning
+    finetuning_warmup_epochs: int = 1  # Number of epochs to keep pretrained weights frozen
+
 
 @dataclass
 class TrainingResult:
@@ -193,7 +207,11 @@ class TrainingResult:
 
 
 def train(
-    model: AbstractModel, data_path: Union[str, Path], config: TrainConfig, model_config: Any
+    model: AbstractModel,
+    data_path: Union[str, Path],
+    config: TrainConfig,
+    model_config: Any,
+    frozen_param_names: Optional[set[str]] = None,
 ) -> TrainingResult:
     data_loader_kwargs = {
         "batch_size": model_config.training.batch_size,
@@ -250,6 +268,14 @@ def train(
         )
 
         callbacks = [best_checkpoint_callback, last_checkpoint_callback]
+
+    # Add callback to unfreeze pretrained weights after warmup epochs
+    if frozen_param_names is not None:
+        unfreeze_callback = UnfreezeCallback(
+            frozen_param_names=frozen_param_names,
+            warmup_epochs=config.finetuning_warmup_epochs,
+        )
+        callbacks.append(unfreeze_callback)
 
     checkpoint_dir = Path(config.checkpoint_dir)
     checkpoint_dir_contents = list(checkpoint_dir.iterdir())
@@ -546,12 +572,35 @@ def main() -> None:
         rulebase_dir=checkpoint_dir,
     )
 
+    # Handle fine-tuning from a pretrained checkpoint
+    if config.finetune_checkpoint_path is not None:
+        logger.info(f"Fine-tuning is enabled from checkpoint: {config.finetune_checkpoint_path}")
+
+        # Get the list of non-transferable parameter prefixes from the model
+        nontransferable_prefixes = model.get_nontransferable_param_prefixes()
+        logger.info(f"Non-transferable parameter prefixes: {nontransferable_prefixes}")
+
+        # Load pretrained weights, skipping non-transferable ones. If we're resuming from a
+        # checkpoint, `trainer.fit()` will overwrite these with the checkpoint weights, but the
+        # freezing pattern remains correct.
+        loaded_params = load_pretrained_weights(
+            model=model,
+            checkpoint_path=config.finetune_checkpoint_path,
+            nontransferable_prefixes=nontransferable_prefixes,
+        )
+
+        # Freeze the pretrained parameters
+        freeze_pretrained_layers(model=model, loaded_param_names=loaded_params)
+    else:
+        loaded_params = None
+
     logger.info("Starting training")
     train(
         model=model,
         data_path=str(processed_data_dir / "data.h5"),
         config=config,
         model_config=model_config,
+        frozen_param_names=loaded_params,
     )
 
 

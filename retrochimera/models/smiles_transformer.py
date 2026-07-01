@@ -699,3 +699,11 @@ class SmilesTransformerModel(AbstractModel[SmilesReactionSample, ProcessedSample
     def set_rulebase(self, rulebase: RuleBase, rulebase_dir: Union[str, Path]) -> None:
         # Inherited from other template-based models (Not used in this model now)
         self.rulebase_dir = rulebase_dir
+
+    def get_nontransferable_param_prefixes(self) -> list[str]:
+        prefixes = ["token_fc."]
+        if self.share_encoder_decoder_input_embedding:
+            prefixes.append("token_embedding.")
+        else:
+            prefixes.extend(["encoder_token_embedding.", "decoder_token_embedding."])
+        return prefixes

@@ -98,6 +98,13 @@ class AbstractModel(
     ) -> Iterable[ProcessedSampleType]:
         pass
 
+    def get_nontransferable_param_prefixes(self) -> list[str]:
+        """Get prefixes for parameters that should not be transferred during fine-tuning.
+
+        These are typically parameters that depend on vocab or template library size.
+        """
+        return []
+
     @abstractmethod
     def collate(self, samples: list[ProcessedSampleType]) -> BatchType:
         pass

@@ -7,6 +7,10 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added
+
+- Add support for model finetuning ([#21](https://github.com/microsoft/retrochimera/pull/21)) ([@kmaziarz])
+
 ## [1.2.0] - 2026-06-17
 
 ### Changed
