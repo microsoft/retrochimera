@@ -61,6 +61,9 @@ This step converts the data further into a featurized form ready for training. T
 In this step one trains a model on the featurized data from previous step. Model class and other hyperparameters set here must match those set during preprocessing. By default training will proceed for several epochs, saving checkpoints along the way, and then average out a set of best checkpoints to form `combined.ckpt`.
 Settings used for the provided checkpoints can be found under `retrochimera/cli/config`, and are accessed by setting the `preset` argument.
 
+One can also set `finetune_checkpoint_path` to warm-start training starting from a pretrained checkpoint.
+Template library and SMILES token vocabulary do not have to be the same between pretraining and finetuning, as the layers relating to those are always reinitialized.
+
 # Ensembling
 
 - Input: `*.json` files containing dumped model outputs on validation and train set
