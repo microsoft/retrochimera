@@ -56,9 +56,9 @@ The main (and most powerful) checkpoint we release is trained on [Pistachio](htt
 For benchmarking, we also provide (weaker) checkpoints trained on [USPTO-50K](https://figshare.com/ndownloader/files/59511926) and [USPTO-FULL](https://figshare.com/ndownloader/files/59494598).
 
 If you care about reproducing the USPTO-* results from our paper _exactly_, make sure to use the inference hyperparameters listed in Extended Data Tables 3 and 4.
-By default, these parameters are set to values optimal for the Pistachio checkpoint.
+By default, these parameters are set to values optimized for the Pistachio checkpoint.
 
-Finally, we additionally release a [forward model checkpoint](https://figshare.com/ndownloader/files/66654872), which shares the same architecture as the SMILES-based submodel in RetroChimera, and was also trained on Pistachio.
+Finally, we release a [forward model checkpoint](https://figshare.com/ndownloader/files/66654872), which uses the same architecture as the SMILES-based submodel of RetroChimera and was also trained on Pistachio.
 
 > [!WARNING]
 > RetroChimera 1 is being released for research and experimentation - we hope you try to break it in any way possible and share the results back to us. As any ML model it is **not free from errors and may hallucinate**, in particular when used for inputs out of the training distribution. We look forward to collaborating with the community so we can improve the model for everyone!
