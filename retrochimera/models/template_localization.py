@@ -569,6 +569,8 @@ class TemplateLocalizationModel(AbstractModel[TemplateReactionSample, ProcessedS
         # Add rewrite_encoder's non-transferable prefixes
         if self.rewrite_encoder.atom_categorical_features_emb is not None:
             prefixes.append("rewrite_encoder.atom_categorical_features_emb.")
+        elif self.rewrite_encoder._use_graphium:
+            prefixes.append("rewrite_encoder.gnn.pre_nn.")
         else:
             prefixes.append("rewrite_encoder.gnn.convs.0.")
 
