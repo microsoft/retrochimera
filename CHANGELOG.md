@@ -7,6 +7,10 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Changed
+
+- Update `protobuf` dependency to 5.29.6 ([#25](https://github.com/microsoft/retrochimera/pull/25)) ([@kmaziarz])
+
 ### Added
 
 - Add support for model finetuning ([#21](https://github.com/microsoft/retrochimera/pull/21), [#24](https://github.com/microsoft/retrochimera/pull/24)) ([@kmaziarz])
