@@ -24,7 +24,6 @@ dependencies = [
     "pyopenssl>=23.0.0",
     "scikit-learn",
     "syntheseus>=0.7.2",
-    "syntheseus-root-aligned==0.2.0",
     "tqdm",
     "wandb==0.17.7",
 ]
@@ -77,7 +76,6 @@ module = [
     "joblib.*",
     "pandas.*",
     "rdchiral.*",
-    "root_aligned.*",
     "scipy.*",
     "torch_geometric.*",
     "tqdm.*",

@@ -9,14 +9,13 @@ from syntheseus.reaction_prediction.inference_base import ExternalForwardReactio
 from syntheseus.reaction_prediction.utils.inference import process_raw_smiles_outputs_forwards
 
 from retrochimera.inference.smiles_transformer import AbstractSmilesTransformerModel
+from retrochimera.utils.root_aligned import clear_map_canonical_smiles
 
 
 class SmilesTransformerForwardModel(
     AbstractSmilesTransformerModel[Bag[Molecule], Reaction], ExternalForwardReactionModel
 ):
     def _augment_input(self, input: Bag[Molecule]) -> list[str]:
-        from root_aligned.preprocessing.generate_PtoR_data import clear_map_canonical_smiles
-
         augmented_input = []
 
         # Obtain `reactant_roots`

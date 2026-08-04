@@ -19,7 +19,12 @@ from syntheseus.reaction_prediction.utils.config import get_config as cli_get_co
 from tqdm import tqdm
 
 from retrochimera.utils.logging import get_logger
-from retrochimera.utils.root_aligned import get_product_roots
+from retrochimera.utils.root_aligned import (
+    clear_map_canonical_smiles,
+    get_cano_map_number,
+    get_product_roots,
+    get_root_id,
+)
 
 RDLogger.DisableLog("rdApp.*")
 
@@ -40,12 +45,6 @@ class AugmentRSMILESConfig:
 
 def multi_process(data: dict):
     """Multi-process function to process the data."""
-    from root_aligned.preprocessing.generate_PtoR_data import (
-        clear_map_canonical_smiles,
-        get_cano_map_number,
-        get_root_id,
-    )
-
     reaction = data["reaction"]
     augmentation = data["augmentation"]
 

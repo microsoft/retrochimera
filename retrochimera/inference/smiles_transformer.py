@@ -17,7 +17,7 @@ from syntheseus.reaction_prediction.utils.misc import suppress_outputs
 from retrochimera.models.smiles_transformer import SmilesTransformerModel as TransformerModel
 from retrochimera.opennmt.decode.translator import Translator
 from retrochimera.utils.logging import get_logger
-from retrochimera.utils.root_aligned import get_product_roots
+from retrochimera.utils.root_aligned import clear_map_canonical_smiles, get_product_roots
 
 logger = get_logger(__name__)
 
@@ -279,8 +279,6 @@ class SmilesTransformerModel(
     AbstractSmilesTransformerModel[Molecule, SingleProductReaction], ExternalBackwardReactionModel
 ):
     def _augment_input(self, input: Molecule) -> list[str]:
-        from root_aligned.preprocessing.generate_PtoR_data import clear_map_canonical_smiles
-
         augmented_input = []
 
         product_roots = get_product_roots(
