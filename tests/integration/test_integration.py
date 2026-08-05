@@ -536,3 +536,12 @@ def test_optimize_ensembles(tmp_path: Path, processed_output_dir: Path) -> None:
         data_dir=processed_output_dir,
         eval_results_dir=tmp_path / "eval_results_ensemble",
     )
+
+    # Re-run eval on the same ensemble checkpoint but restricting to consensus predictions only.
+    check_model_eval(
+        eval_model_class="RetroChimera",
+        model_dir=ensemble_checkpoint_full_dir,
+        data_dir=processed_output_dir,
+        eval_results_dir=tmp_path / "eval_results_ensemble_consensus_only",
+        extra_args=["model_kwargs={'consensus_only': True}"],
+    )

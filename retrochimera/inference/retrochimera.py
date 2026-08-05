@@ -26,6 +26,7 @@ class RetroChimeraModel(ExternalBackwardReactionModel):
         *args,
         model_dir: Optional[Union[str, Path]] = None,
         probability_from_score_temperature: float = 8.0,
+        consensus_only: bool = False,
         call_submodels_in_parallel: bool = True,
         **kwargs,
     ) -> None:
@@ -59,6 +60,8 @@ class RetroChimeraModel(ExternalBackwardReactionModel):
 
         self._init_from_dir(model_dir=model_dir, model_data=model_data, model_kwargs=model_kwargs)
         self.probability_from_score_temperature = probability_from_score_temperature
+        self.consensus_only = consensus_only
+
         self._call_submodels_in_parallel = call_submodels_in_parallel
 
         if not self._models:
@@ -134,6 +137,7 @@ class RetroChimeraModel(ExternalBackwardReactionModel):
                 num_results=num_results,
                 model_names=self._model_names,
                 probability_from_score_temperature=self.probability_from_score_temperature,
+                consensus_only=self.consensus_only,
             )
             for input, model_results in zip(inputs, zip(*model_batch_results))
         ]
@@ -146,6 +150,7 @@ def combine_results(
     num_results: int,
     model_names: Optional[list[str]] = None,
     probability_from_score_temperature: Optional[float] = None,
+    consensus_only: bool = False,
 ) -> list[SingleProductReaction]:
     # Generate default model names if not provided.
     model_names = model_names or [f"model_{i}" for i in range(len(model_results))]
@@ -161,6 +166,14 @@ def combine_results(
         for rank, r in enumerate(results):
             result_to_ranks[r.reactants][model_idx] = rank
             result_to_metadata[r.reactants][model_idx] = r.metadata
+
+    if consensus_only:
+        result_to_ranks = {
+            result: ranks
+            for result, ranks in result_to_ranks.items()
+            if all(r is not None for r in ranks)
+        }
+        result_to_metadata = {result: result_to_metadata[result] for result in result_to_ranks}
 
     result_to_score: dict[Bag[Molecule], float] = {}
     for result, ranks in result_to_ranks.items():
