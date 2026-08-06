@@ -5,8 +5,7 @@ from dataclasses import dataclass
 from hashlib import md5
 from typing import Any, Iterable, Optional, cast
 
-from pebble import ProcessPool
-from pebble.common.types import ProcessExpired
+from pebble import ProcessExpired, ProcessPool
 from rdchiral import template_extractor
 from syntheseus.reaction_prediction.chem.utils import (
     molecule_bag_from_smiles_strict,
