@@ -19,11 +19,12 @@ dependencies = [
     "joblib",
     "more_itertools",
     "omegaconf",
+    "pebble~=5.2.0",
     "protobuf==5.29.6",
     "pydantic~=2.0",
     "pyopenssl>=23.0.0",
     "scikit-learn",
-    "syntheseus>=0.7.2",
+    "syntheseus>=0.8.0",
     "tqdm",
     "wandb==0.17.7",
 ]
