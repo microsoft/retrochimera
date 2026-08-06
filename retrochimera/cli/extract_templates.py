@@ -1,10 +1,11 @@
 import dataclasses
 from collections import Counter
+from concurrent.futures import TimeoutError
 from dataclasses import dataclass
 from hashlib import md5
 from typing import Any, Iterable, Optional, cast
 
-import joblib
+from pebble import ProcessExpired, ProcessPool
 from rdchiral import template_extractor
 from syntheseus.reaction_prediction.chem.utils import (
     molecule_bag_from_smiles_strict,
@@ -12,6 +13,7 @@ from syntheseus.reaction_prediction.chem.utils import (
 )
 from syntheseus.reaction_prediction.utils.config import get_config as cli_get_config
 from syntheseus.reaction_prediction.utils.misc import cpu_count, set_random_seed
+from tqdm import tqdm
 
 from retrochimera.chem.rules import RuleBase
 from retrochimera.data.dataset import DataFold, DiskReactionDataset
@@ -33,6 +35,7 @@ class ExtractTemplatesConfig:
     output_dir: str  # Directory to write output to.
     min_freq: int = 0  # Minimum template frequency in training data for inclusion into the library.
     num_processes: int = cpu_count()  # Number of parallel processes to use.
+    timeout: Optional[int] = None  # Timeout per sample (in seconds) for template extraction.
 
 
 def _convert(rxn_smiles: str, rxn_id: int) -> dict[str, Any]:
@@ -63,8 +66,12 @@ def extract(rxn_smiles: str, rxn_id: int, wrap_smarts: bool) -> Optional[Templat
             template = f"({reactants})>{conditions}>({products})"
 
         return TemplateReactionSample(
-            reactants=molecule_bag_from_smiles_strict(remove_atom_mapping(rdch["reactants"])),
-            products=molecule_bag_from_smiles_strict(remove_atom_mapping(rdch["products"])),
+            reactants=molecule_bag_from_smiles_strict(
+                remove_atom_mapping(rdch["reactants"]), make_rdkit_mol=False
+            ),
+            products=molecule_bag_from_smiles_strict(
+                remove_atom_mapping(rdch["products"]), make_rdkit_mol=False
+            ),
             mapped_reaction_smiles=rxn_smiles,
             template=template,
         )
@@ -73,12 +80,41 @@ def extract(rxn_smiles: str, rxn_id: int, wrap_smarts: bool) -> Optional[Templat
 
 
 def extract_templates(
-    rxn_smiles_list: list[str], wrap_smarts: bool, num_processes: int = cpu_count()
+    rxn_smiles_list: list[str],
+    wrap_smarts: bool,
+    num_processes: int = cpu_count(),
+    timeout: Optional[int] = None,
 ) -> list[TemplateReactionSample]:
-    pool = joblib.Parallel(n_jobs=num_processes)
-    jobs = (joblib.delayed(extract)(s, i, wrap_smarts) for i, s in enumerate(rxn_smiles_list))
+    results = []
+    with ProcessPool(max_workers=num_processes) as pool:
+        futures = [
+            pool.schedule(extract, args=(s, i, wrap_smarts), timeout=timeout)
+            for i, s in enumerate(rxn_smiles_list)
+        ]
 
-    return [result for result in pool(jobs) if result is not None]
+        for i, (smiles, future) in enumerate(
+            tqdm(
+                zip(rxn_smiles_list, futures),
+                total=len(rxn_smiles_list),
+                desc="Extracting templates",
+            )
+        ):
+            try:
+                result = future.result()
+                if result is not None:
+                    results.append(result)
+            except TimeoutError:
+                logger.warning(f"Template extraction timed out for sample {i}: {smiles}")
+            except ProcessExpired:
+                logger.warning(
+                    f"Template extraction process expired while processing sample {i}: {smiles}"
+                )
+
+    logger.info(
+        f"Extraction was successful for {len(results)} out of {len(rxn_smiles_list)} samples"
+    )
+
+    return results
 
 
 @dataclass
@@ -108,6 +144,7 @@ def process_reactions(
     min_template_occurrence: int = 0,
     wrap_smarts: bool = True,
     num_processes: int = cpu_count(),
+    timeout: Optional[int] = None,
 ) -> LabeledMolsAndTemplates:
     """Workflow for processing datasets of reactions.
        Performs
@@ -123,13 +160,17 @@ def process_reactions(
         wrap_smarts: Whether to transform "reactants>conditions>products" into
             "(reactants)>conditions>(products)".
         num_processes: Number of parallel processes to use.
+        timeout: Timeout per sample (in seconds) for template extraction.
 
     Returns:
         Dataclass containing the labelled (mol, template) data, and the template library.
     """
     logger.info("Extracting templates from training set")
     processed_train_samples = extract_templates(
-        reactions[DataFold.TRAIN], wrap_smarts=wrap_smarts, num_processes=num_processes
+        reactions[DataFold.TRAIN],
+        wrap_smarts=wrap_smarts,
+        num_processes=num_processes,
+        timeout=timeout,
     )
 
     logger.info("Building the template library")
@@ -148,7 +189,10 @@ def process_reactions(
             processed_samples = processed_train_samples
         else:
             processed_samples = extract_templates(
-                reactions[fold], wrap_smarts=wrap_smarts, num_processes=num_processes
+                reactions[fold],
+                wrap_smarts=wrap_smarts,
+                num_processes=num_processes,
+                timeout=timeout,
             )
 
         # Samples that use rare templates will be assigned a label of `-1`.
@@ -185,7 +229,11 @@ def label(
 
 
 def process_smiles(
-    input_dir: str, output_dir: str, min_template_occurrence: int, num_processes: int
+    input_dir: str,
+    output_dir: str,
+    min_template_occurrence: int,
+    num_processes: int,
+    timeout: Optional[int],
 ) -> None:
     logger.info(
         f"Params: {input_dir} {output_dir}, min template frequency: {min_template_occurrence}"
@@ -205,6 +253,7 @@ def process_smiles(
         reactions=load_raw_reactions_files(input_dir),
         min_template_occurrence=min_template_occurrence,
         num_processes=num_processes,
+        timeout=timeout,
     )
 
     logger.info("Done processing, saving rulebase")
@@ -222,11 +271,14 @@ def run_from_config(config: ExtractTemplatesConfig) -> None:
         config.output_dir,
         min_template_occurrence=config.min_freq,
         num_processes=config.num_processes,
+        timeout=config.timeout,
     )
 
 
 def main(argv: Optional[list[str]]) -> None:
     config: ExtractTemplatesConfig = cli_get_config(argv=argv, config_cls=ExtractTemplatesConfig)
+    logger.info(f"Running template extraction with the following config: {config}")
+
     run_from_config(config)
 
 
