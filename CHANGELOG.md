@@ -9,6 +9,7 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Changed
 
+- Make template extraction more robust ([#28](https://github.com/microsoft/retrochimera/pull/28)) ([@kmaziarz])
 - Remove dependency on `syntheseus-root-aligned` and vendor relevant utils ([#27](https://github.com/microsoft/retrochimera/pull/27)) ([@lgeiger])
 - Update `protobuf` dependency to 5.29.6 ([#25](https://github.com/microsoft/retrochimera/pull/25)) ([@kmaziarz])
 
