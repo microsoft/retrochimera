@@ -51,6 +51,10 @@ class SplitDatasetConfig:
     output_dir: str  # output directory for saving the resulting folds
     num_processes: int = cpu_count()  # number of processes to use for processing the SMILES
 
+    # Path to a file containing pre-computed common products (in the same format as we'd save it).
+    # If set, common products are read from this file instead of being computed from the data.
+    common_products_path: Optional[str] = None
+
     # Directory containing the folds of a pre-split datset. These are used to define products that
     # should preferrably be placed into the train/validation/test set. This setting is useful if one
     # wants to train on one dataset and validate on another pre-split one while minimizing leakage.
@@ -82,17 +86,26 @@ def filter_dataset(data: list[ReactionSample], config: SplitDatasetConfig) -> li
     )
 
     # Create and save occurrence count of product molecules.
-    common_products: Counter = Counter()
-    for sample in data:
-        common_products.update(sample.products)
+    if config.common_products_path is not None:
+        # Read common products from the provided file.
+        common_products: Counter[Molecule] = Counter()
+        with open(config.common_products_path, "rt") as f:
+            for line in f:
+                smiles, count_str = line.strip().rsplit(" ", 1)
+                common_products[Molecule(smiles)] = int(count_str)
+    else:
+        # Compute common products from the data.
+        common_products = Counter()
+        for sample in data:
+            common_products.update(sample.products)
 
-    common_products = Counter(
-        {p: cnt for p, cnt in common_products.items() if cnt >= config.max_product_occurrences}
-    )
+        common_products = Counter(
+            {p: cnt for p, cnt in common_products.items() if cnt >= config.max_product_occurrences}
+        )
 
-    with open(changed_samples_dir / "common_products.txt", "w") as f:
-        for product, count in common_products.most_common():
-            f.write(f"{product.smiles} {count}\n")
+        with open(changed_samples_dir / "common_products.txt", "w") as f:
+            for product, count in common_products.most_common():
+                f.write(f"{product.smiles} {count}\n")
 
     # Step 2: Drop samples with more than one main product.
     # A non-main product either has fewer than `min_product_atoms` atoms or occurs at least
