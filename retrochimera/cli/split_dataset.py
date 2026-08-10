@@ -167,6 +167,11 @@ def split_dataset(config: SplitDatasetConfig) -> None:
     logger.info(f"Left with {len(data)} valid samples\n")
 
     data = filter_dataset(data, config)
+
+    if not data:
+        logger.warning("No samples left after filtering")
+        return
+
     logger.info(f"Left with {len(data)} samples after filtering")
 
     fold_target_size: dict[DataFold, int] = {
@@ -178,7 +183,7 @@ def split_dataset(config: SplitDatasetConfig) -> None:
     fold_sizes_joined = "\n".join([f"{fold.value}: {fold_target_size[fold]}" for fold in DataFold])
     logger.info(f"Fold target sizes:\n{fold_sizes_joined}")
 
-    assert min(fold_target_size.values()) >= 0, "Target fold sizes must be positive"
+    assert min(fold_target_size.values()) >= 0, "Target fold sizes must be non-negative"
 
     data_grouped: dict[Bag[Molecule], list[ReactionSample]] = defaultdict(list)
     num_products_count: dict[int, int] = defaultdict(int)
@@ -254,12 +259,13 @@ def split_dataset(config: SplitDatasetConfig) -> None:
 
     random.shuffle(data_groups_left)
 
-    folds = list(DataFold)
-    current_fold = DataFold.TRAIN
+    # Make sure to never add samples to folds where the target size is zero.
+    folds = [fold for fold in DataFold if fold_target_size[fold] > 0]
+    current_fold = folds[0]
 
     for _, d_group in data_groups_left:
         if (
-            current_fold != DataFold.TEST
+            current_fold != folds[-1]
             and len(data_split[current_fold]) + len(d_group) > fold_target_size[current_fold]
         ):
             # If the current fold is full progress to the next one.
@@ -277,6 +283,9 @@ def split_dataset(config: SplitDatasetConfig) -> None:
 
     logger.info(f"Saving data under {config.output_dir}")
     for fold, datapoints in data_split.items():
+        if not datapoints:
+            continue  # Do not save files for empty folds
+
         random.shuffle(datapoints)
 
         with open(Path(config.output_dir) / f"{fold.value}.smi", "wt") as f:
