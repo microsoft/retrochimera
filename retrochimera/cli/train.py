@@ -143,9 +143,7 @@ class TemplateLocalizationConfig:
     num_negative_rewrites_in_localization: int = 0
     rewrite_encoder_num_epochs: Optional[int] = None
     training: TrainingConfig = field(
-        default_factory=lambda: TrainingConfig(
-            n_epochs=600, learning_rate_decay_step_size=550
-        )
+        default_factory=lambda: TrainingConfig(n_epochs=600, learning_rate_decay_step_size=550)
     )
 
 
