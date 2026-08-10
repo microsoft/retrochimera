@@ -279,7 +279,7 @@ def split_dataset(config: SplitDatasetConfig) -> None:
     for fold, datapoints in data_split.items():
         random.shuffle(datapoints)
 
-        with open(Path(config.output_dir) / f"pista_{fold.value}.smi", "wt") as f:
+        with open(Path(config.output_dir) / f"{fold.value}.smi", "wt") as f:
             for datapoint in datapoints:
                 original_str = datapoint.metadata["original_str"]  # type: ignore[typeddict-item]
                 f.write(f"{original_str}\n")
