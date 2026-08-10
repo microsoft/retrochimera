@@ -10,6 +10,9 @@ The processing hyperparameters can be overriden, but by default they map to the 
 5. Refine reactions by removing atom mapping numbers appearing only on one side, and dropping
    reactants with no mapped atoms. Remove reactions with an invalid mapping or no mapping left.
 
+By default, we follow RetroChimera 1, and apply the steps in the order listed above. Setting
+`legacy_step_order=False` uses a new step order, which may result in fewer samples being dropped.
+
 Split into folds is random after grouping by product. Optionally, a `dataset_to_follow_dir` argument
 allows for splitting in accordance with an external (already split) dataset.
 """
@@ -60,6 +63,9 @@ class SplitDatasetConfig:
     # wants to train on one dataset and validate on another pre-split one while minimizing leakage.
     dataset_to_follow_dir: Optional[str] = None
 
+    # Whether to use the original step order from RetroChimera 1.
+    legacy_step_order: bool = True
+
     # Fraction of samples to place into each fold.
     val_frac: float = 0.05
     test_frac: float = 0.05
@@ -78,12 +84,13 @@ def filter_dataset(data: list[ReactionSample], config: SplitDatasetConfig) -> li
     changed_samples_dir = Path(config.output_dir) / "changed_samples"
     changed_samples_dir.mkdir(parents=True, exist_ok=True)
 
-    # Step 1: Drop samples with too many reactants.
-    data = list(
-        NumReactantsProcessingStep(
-            name="1", output_dir=changed_samples_dir, max_reactants_num=config.max_reactants_num
-        ).process_samples(data)
+    num_reactants_step = NumReactantsProcessingStep(
+        name="1", output_dir=changed_samples_dir, max_reactants_num=config.max_reactants_num
     )
+
+    if config.legacy_step_order:
+        # Step 1: Drop samples with too many reactants.
+        data = list(num_reactants_step.process_samples(data))
 
     # Create and save occurrence count of product molecules.
     if config.common_products_path is not None:
@@ -133,13 +140,24 @@ def filter_dataset(data: list[ReactionSample], config: SplitDatasetConfig) -> li
     # Step 5: Fix samples with minor mapping issues and drop those that cannot be fixed.
     atom_mapping_step = AtomMappingProcessingStep(name="5", output_dir=changed_samples_dir)
 
+    if config.legacy_step_order:
+        steps = [
+            one_main_product_step,
+            num_atoms_step,
+            product_among_reactants_step,
+            atom_mapping_step,
+        ]
+    else:
+        steps = [
+            one_main_product_step,
+            atom_mapping_step,
+            num_atoms_step,
+            product_among_reactants_step,
+            num_reactants_step,
+        ]
+
     data_iterable: Iterable[ReactionSample] = data
-    for step in [
-        one_main_product_step,
-        num_atoms_step,
-        product_among_reactants_step,
-        atom_mapping_step,
-    ]:
+    for step in steps:
         data_iterable = step.process_samples(data_iterable)
 
     for sample in tqdm(data_iterable, total=len(data)):
