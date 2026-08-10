@@ -11,7 +11,7 @@ import datetime
 import math
 import shutil
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
 from typing import Any, Optional, Union, cast
@@ -100,20 +100,20 @@ class TrainingConfig:
 class TemplateClassificationChemConfig:
     """Configures the template classification model backed by the chem encoder."""
 
-    encoder: ChemEncoderConfig = ChemEncoderConfig()
-    mlp: MLPConfig = MLPConfig()
+    encoder: ChemEncoderConfig = field(default_factory=ChemEncoderConfig)
+    mlp: MLPConfig = field(default_factory=MLPConfig)
     label_smoothing: float = 0.0
-    training: TrainingConfig = TrainingConfig()
+    training: TrainingConfig = field(default_factory=TrainingConfig)
 
 
 @dataclass
 class TemplateClassificationGNNConfig:
     """Configures the template classification model backed by the GNN encoder."""
 
-    encoder: GNNEncoderConfig = GNNEncoderConfig()
-    mlp: MLPConfig = MLPConfig(dropout=0.4, hidden_dim=128)
+    encoder: GNNEncoderConfig = field(default_factory=GNNEncoderConfig)
+    mlp: MLPConfig = field(default_factory=lambda: MLPConfig(dropout=0.4, hidden_dim=128))
     label_smoothing: float = 0.0
-    training: TrainingConfig = TrainingConfig(n_epochs=150)
+    training: TrainingConfig = field(default_factory=lambda: TrainingConfig(n_epochs=150))
 
 
 @dataclass
@@ -124,11 +124,13 @@ class TemplateLocalizationConfig:
     # atom-level outputs, thus `ChemEncoder` would not suffice. The configuration below can be
     # generalized once we introduce other suitable encoders, e.g. based on graph transformers.
 
-    input_encoder: GNNEncoderConfig = GNNEncoderConfig(
-        aggregation_dropout=0.4
+    input_encoder: GNNEncoderConfig = field(
+        default_factory=lambda: GNNEncoderConfig(aggregation_dropout=0.4)
     )  # Encoder to use for input graphs
-    rewrite_encoder: GNNEncoderConfig = GNNEncoderConfig(
-        aggregation_dropout=0.4, featurizer_class="DGLLifeRewriteFeaturizer"
+    rewrite_encoder: GNNEncoderConfig = field(
+        default_factory=lambda: GNNEncoderConfig(
+            aggregation_dropout=0.4, featurizer_class="DGLLifeRewriteFeaturizer"
+        )
     )  # Encoder to use for rewrites
     classification_label_smoothing: float = 0.1
     localization_label_smoothing: float = 0.1
@@ -140,7 +142,11 @@ class TemplateLocalizationConfig:
     negative_to_positive_targets_ratio: float = 0.0
     num_negative_rewrites_in_localization: int = 0
     rewrite_encoder_num_epochs: Optional[int] = None
-    training: TrainingConfig = TrainingConfig(n_epochs=600, learning_rate_decay_step_size=550)
+    training: TrainingConfig = field(
+        default_factory=lambda: TrainingConfig(
+            n_epochs=600, learning_rate_decay_step_size=550
+        )
+    )
 
 
 @dataclass
@@ -164,7 +170,9 @@ class SmilesTransformerConfig:
     layer_norm: str = "standard"
     num_kv: int = 0
     parallel_residual: bool = False
-    training: TrainingConfig = TrainingConfig(n_epochs=200, batch_size=128)
+    training: TrainingConfig = field(
+        default_factory=lambda: TrainingConfig(n_epochs=200, batch_size=128)
+    )
 
 
 @dataclass
@@ -174,14 +182,18 @@ class ModelTrainingConfig:
     model_class: ModelClass  # Which model type to train
 
     # Fields relevant to specific model types
-    template_classification_chem_config: TemplateClassificationChemConfig = (
-        TemplateClassificationChemConfig()
+    template_classification_chem_config: TemplateClassificationChemConfig = field(
+        default_factory=TemplateClassificationChemConfig
     )
-    template_classification_gnn_config: TemplateClassificationGNNConfig = (
-        TemplateClassificationGNNConfig()
+    template_classification_gnn_config: TemplateClassificationGNNConfig = field(
+        default_factory=TemplateClassificationGNNConfig
     )
-    template_localization_config: TemplateLocalizationConfig = TemplateLocalizationConfig()
-    smiles_transformer_config: SmilesTransformerConfig = SmilesTransformerConfig()
+    template_localization_config: TemplateLocalizationConfig = field(
+        default_factory=TemplateLocalizationConfig
+    )
+    smiles_transformer_config: SmilesTransformerConfig = field(
+        default_factory=SmilesTransformerConfig
+    )
 
 
 @dataclass
