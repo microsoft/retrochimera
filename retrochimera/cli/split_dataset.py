@@ -47,9 +47,9 @@ logger = get_logger(__name__)
 class SplitDatasetConfig:
     """Config for splitting a given dataset."""
 
-    input_path: str  # path to the dataset to be split (either Pistachio or USPTO format)
-    output_dir: str  # output directory for saving the resulting folds
-    num_processes: int = cpu_count()  # number of processes to use for processing the SMILES
+    input_path: str  # Path to the dataset to be split (either Pistachio or USPTO format)
+    output_dir: str  # Output directory for saving the resulting folds
+    num_processes: int = cpu_count()  # Number of processes to use for processing the SMILES
 
     # Path to a file containing pre-computed common products (in the same format as we'd save it).
     # If set, common products are read from this file instead of being computed from the data.
