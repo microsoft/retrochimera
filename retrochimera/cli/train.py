@@ -559,17 +559,18 @@ def main() -> None:
         shutil.copy(processed_rulebase_path, checkpoint_rulebase_path)
 
     if config.model_class is ModelClass.SmilesTransformer:
+        rulebase = RuleBase()
         checkpoint_vocab_path = checkpoint_dir / SmilesTransformerModel.DEFAULT_VOCAB_FILE_NAME
 
         if not checkpoint_vocab_path.exists():
             # For the SMILES Transformer we also copy the vocab file.
             logger.info(f"Copying the vocab file into {config.checkpoint_dir}")
             shutil.copy(config.smiles_transformer_config.vocab_path, checkpoint_vocab_path)
+    else:
+        rulebase = RuleBase.load_from_file(dir=checkpoint_dir)
 
     model, model_config = build_model_from_config(
-        config=config,
-        rulebase=RuleBase.load_from_file(dir=checkpoint_dir),
-        rulebase_dir=checkpoint_dir,
+        config=config, rulebase=rulebase, rulebase_dir=checkpoint_dir
     )
 
     # Handle fine-tuning from a pretrained checkpoint
