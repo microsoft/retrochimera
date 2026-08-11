@@ -61,10 +61,23 @@ def load_ground_truths(
     return {fold: [(r.products, r.reactants) for r in dataset[fold]] for fold in folds}
 
 
-def load_predicted_reactants(data: dict[str, Any]) -> list[list[list[Molecule]]]:
+def load_predicted_reactants(
+    data: dict[str, Any],
+    ground_truth_products: list[Bag[Molecule]],
+    offset: int = 0,
+) -> list[list[list[Molecule]]]:
     raw_reactants: list[list[list[Molecule]]] = []
-    for predictions in data["predictions"]:
+    for i, predictions in enumerate(data["predictions"]):
         if isinstance(predictions, dict):
+            input_smiles = predictions.get("input")
+            if input_smiles is not None:
+                expected = ground_truth_products[offset + i]
+                actual = Bag([make_mol(input_smiles)])
+                assert actual == expected, (
+                    f"Prediction {offset + i}: input '{input_smiles}' does not match "
+                    f"expected product '{expected}'"
+                )
+
             predictions = predictions["predictions"]  # Handle older output format.
 
         raw_reactants.append(  # Handle older output format.
@@ -242,11 +255,14 @@ def run_from_config(config: EvalEnsemblesConfig) -> None:
     output_dir = Path(config.output_dir)
 
     logger.info(f"Loading dataset ground truths from {config.data_dir}")
+    all_ground_truths = load_ground_truths(
+        data_dir=config.data_dir, folds=[DataFold.VALIDATION, DataFold.TEST]
+    )
     ground_truths = {
-        fold: [reactants for _, reactants in samples]
-        for fold, samples in load_ground_truths(
-            data_dir=config.data_dir, folds=[DataFold.VALIDATION, DataFold.TEST]
-        ).items()
+        fold: [reactants for _, reactants in samples] for fold, samples in all_ground_truths.items()
+    }
+    ground_truth_products = {
+        fold: [products for products, _ in samples] for fold, samples in all_ground_truths.items()
     }
 
     # If the results for some of the models are split into subdirectories, make sure these are
@@ -312,7 +328,8 @@ def run_from_config(config: EvalEnsemblesConfig) -> None:
                     num_samples_2=len(data["predictions"]),
                 )
 
-            for reactants in load_predicted_reactants(data):
+            offset = len(model_to_fold_to_results[model_class][fold])
+            for reactants in load_predicted_reactants(data, ground_truth_products[fold], offset):
                 model_to_fold_to_results[model_class][fold].append([Bag(r) for r in reactants])
 
     models_to_ensemble: list[str] = []
