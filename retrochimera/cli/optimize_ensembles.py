@@ -268,7 +268,11 @@ def run_from_config(config: EvalEnsemblesConfig) -> None:
     # If the results for some of the models are split into subdirectories, make sure these are
     # processed in correct order (we assume a naming scheme of the form `...1`, `...2`, etc).
     result_paths = sorted(
-        glob.glob(f"{config.results_dir}/**/eval_results_{config.dataset}/*.json", recursive=True)
+        dict.fromkeys(
+            glob.glob(
+                f"{config.results_dir}/**/eval_results_{config.dataset}/**/*.json", recursive=True
+            )
+        )
     )
 
     result_paths_joined = "\n".join(result_paths)
@@ -298,7 +302,18 @@ def run_from_config(config: EvalEnsemblesConfig) -> None:
         with open(path, "rt") as f:
             data = json.load(f)
 
-            if not data["predictions"]:
+            # Check if predictions are stored in a separate .jsonl file in the same directory.
+            jsonl_files = list(Path(path).parent.glob("*.jsonl"))
+            if len(jsonl_files) > 1:
+                raise ValueError(f"Multiple .jsonl prediction files found for model {model_class}")
+
+            if jsonl_files:
+                [jsonl_path] = jsonl_files
+                logger.info(f"Detected resumable format; loading predictions from {jsonl_path}")
+                with open(jsonl_path, "rt") as f_predictions:
+                    data["predictions"] = [json.loads(line) for line in f_predictions]
+
+            if not data.get("predictions"):
                 continue
 
             args = data["eval_args"]
