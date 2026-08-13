@@ -22,6 +22,10 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - Allow ensembling to consume eval outputs produced in resumable mode ([#32](https://github.com/microsoft/retrochimera/pull/32)) ([@kmaziarz])
 - Expose the forward model class externally ([#23](https://github.com/microsoft/retrochimera/pull/23)) ([@kmaziarz])
 
+### Fixed
+
+- Fix process leak in rule application server ([#33](https://github.com/microsoft/retrochimera/pull/33)) ([@kmaziarz])
+
 ## [1.2.0] - 2026-06-17
 
 ### Changed
