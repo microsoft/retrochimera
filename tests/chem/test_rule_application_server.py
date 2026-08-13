@@ -1,7 +1,9 @@
 import gc
 import random
+import signal
 import tempfile
-from multiprocessing import active_children
+import time
+from multiprocessing import Event, Pipe, Process, active_children
 
 import pytest
 from syntheseus.reaction_prediction.data.reaction_sample import ReactionSample
@@ -63,3 +65,36 @@ def test_processes_cleaned_up_on_gc(tiny_rulebase):
     gc.collect()
 
     assert not workers_before & set(active_children())
+
+
+def _ignore_sigterm(ready) -> None:
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    ready.set()
+
+    while True:
+        time.sleep(1.0)
+
+
+def test_processes_cleaned_up_when_sigterm_is_ignored():
+    """Verify that cleanup escalates when a worker does not respond to SIGTERM."""
+    parent_connection, child_connection = Pipe()
+    ready = Event()
+
+    worker = Process(target=_ignore_sigterm, args=(ready,))
+    worker.start()
+    child_connection.close()
+
+    try:
+        assert ready.wait(timeout=5.0)
+        RuleApplicationServer._finalize_server({0: worker}, {0: parent_connection})
+
+        # Check that the worker was killed and removed from the active children
+        assert worker not in active_children()
+    finally:
+        if worker in active_children():
+            # If we got here, the test failed; clean it up to avoid leaving a stray process running
+            worker.kill()
+            worker.join(timeout=2.0)
+            worker.close()
+
+        parent_connection.close()
