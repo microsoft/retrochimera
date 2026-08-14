@@ -151,10 +151,21 @@ class RuleApplicationServer:
         for process_id in processes:
             # First wait to see if the process finishes gracefully; if not, SIGTERM it.
             processes[process_id].join(timeout=2.0)
-            processes[process_id].terminate()
+
+            if processes[process_id].is_alive():
+                processes[process_id].terminate()
 
         for process_id in processes:
             processes[process_id].join(timeout=2.0)
+
+            if processes[process_id].is_alive():
+                logger.warning(
+                    f"Rule application process {process_id} ignored SIGTERM; sending SIGKILL"
+                )
+                processes[process_id].kill()
+
+        for process_id in processes:
+            processes[process_id].join(timeout=5.0)
 
         for process_id in processes:
             try:
