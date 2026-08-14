@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from functools import partial
-from pathlib import Path
-from typing import Iterable, Union
+from typing import Iterable
 
 from syntheseus.reaction_prediction.utils.misc import parallelize
 
@@ -34,7 +33,6 @@ def _process_sample(
 
 def preprocess_samples(
     samples: Iterable[SmilesReactionSample],
-    rulebase_dir: Union[str, Path],
     tokenizer: Tokenizer,
     num_processes: int,
 ) -> Iterable[ProcessedSample]:
