@@ -10,6 +10,9 @@ The processing hyperparameters can be overriden, but by default they map to the 
 5. Refine reactions by removing atom mapping numbers appearing only on one side, and dropping
    reactants with no mapped atoms. Remove reactions with an invalid mapping or no mapping left.
 
+By default, we follow RetroChimera 1, and apply the steps in the order listed above. Setting
+`legacy_step_order=False` uses a new step order, which may result in fewer samples being dropped.
+
 Split into folds is random after grouping by product. Optionally, a `dataset_to_follow_dir` argument
 allows for splitting in accordance with an external (already split) dataset.
 """
@@ -47,14 +50,21 @@ logger = get_logger(__name__)
 class SplitDatasetConfig:
     """Config for splitting a given dataset."""
 
-    input_path: str  # path to the dataset to be split (either Pistachio or USPTO format)
-    output_dir: str  # output directory for saving the resulting folds
-    num_processes: int = cpu_count()  # number of processes to use for processing the SMILES
+    input_path: str  # Path to the dataset to be split (either Pistachio or USPTO format)
+    output_dir: str  # Output directory for saving the resulting folds
+    num_processes: int = cpu_count()  # Number of processes to use for processing the SMILES
+
+    # Path to a file containing pre-computed common products (in the same format as we'd save it).
+    # If set, common products are read from this file instead of being computed from the data.
+    common_products_path: Optional[str] = None
 
     # Directory containing the folds of a pre-split datset. These are used to define products that
     # should preferrably be placed into the train/validation/test set. This setting is useful if one
     # wants to train on one dataset and validate on another pre-split one while minimizing leakage.
     dataset_to_follow_dir: Optional[str] = None
+
+    # Whether to use the original step order from RetroChimera 1.
+    legacy_step_order: bool = True
 
     # Fraction of samples to place into each fold.
     val_frac: float = 0.05
@@ -74,25 +84,35 @@ def filter_dataset(data: list[ReactionSample], config: SplitDatasetConfig) -> li
     changed_samples_dir = Path(config.output_dir) / "changed_samples"
     changed_samples_dir.mkdir(parents=True, exist_ok=True)
 
-    # Step 1: Drop samples with too many reactants.
-    data = list(
-        NumReactantsProcessingStep(
-            name="1", output_dir=changed_samples_dir, max_reactants_num=config.max_reactants_num
-        ).process_samples(data)
+    num_reactants_step = NumReactantsProcessingStep(
+        name="1", output_dir=changed_samples_dir, max_reactants_num=config.max_reactants_num
     )
+
+    if config.legacy_step_order:
+        # Step 1: Drop samples with too many reactants.
+        data = list(num_reactants_step.process_samples(data))
 
     # Create and save occurrence count of product molecules.
-    common_products: Counter = Counter()
-    for sample in data:
-        common_products.update(sample.products)
+    if config.common_products_path is not None:
+        # Read common products from the provided file.
+        common_products: Counter[Molecule] = Counter()
+        with open(config.common_products_path, "rt") as f:
+            for line in f:
+                smiles, count_str = line.strip().rsplit(" ", 1)
+                common_products[Molecule(smiles)] = int(count_str)
+    else:
+        # Compute common products from the data.
+        common_products = Counter()
+        for sample in data:
+            common_products.update(sample.products)
 
-    common_products = Counter(
-        {p: cnt for p, cnt in common_products.items() if cnt >= config.max_product_occurrences}
-    )
+        common_products = Counter(
+            {p: cnt for p, cnt in common_products.items() if cnt >= config.max_product_occurrences}
+        )
 
-    with open(changed_samples_dir / "common_products.txt", "w") as f:
-        for product, count in common_products.most_common():
-            f.write(f"{product.smiles} {count}\n")
+        with open(changed_samples_dir / "common_products.txt", "w") as f:
+            for product, count in common_products.most_common():
+                f.write(f"{product.smiles} {count}\n")
 
     # Step 2: Drop samples with more than one main product.
     # A non-main product either has fewer than `min_product_atoms` atoms or occurs at least
@@ -120,13 +140,24 @@ def filter_dataset(data: list[ReactionSample], config: SplitDatasetConfig) -> li
     # Step 5: Fix samples with minor mapping issues and drop those that cannot be fixed.
     atom_mapping_step = AtomMappingProcessingStep(name="5", output_dir=changed_samples_dir)
 
+    if config.legacy_step_order:
+        steps = [
+            one_main_product_step,
+            num_atoms_step,
+            product_among_reactants_step,
+            atom_mapping_step,
+        ]
+    else:
+        steps = [
+            one_main_product_step,
+            atom_mapping_step,
+            num_atoms_step,
+            product_among_reactants_step,
+            num_reactants_step,
+        ]
+
     data_iterable: Iterable[ReactionSample] = data
-    for step in [
-        one_main_product_step,
-        num_atoms_step,
-        product_among_reactants_step,
-        atom_mapping_step,
-    ]:
+    for step in steps:
         data_iterable = step.process_samples(data_iterable)
 
     for sample in tqdm(data_iterable, total=len(data)):
@@ -154,6 +185,11 @@ def split_dataset(config: SplitDatasetConfig) -> None:
     logger.info(f"Left with {len(data)} valid samples\n")
 
     data = filter_dataset(data, config)
+
+    if not data:
+        logger.warning("No samples left after filtering")
+        return
+
     logger.info(f"Left with {len(data)} samples after filtering")
 
     fold_target_size: dict[DataFold, int] = {
@@ -165,7 +201,7 @@ def split_dataset(config: SplitDatasetConfig) -> None:
     fold_sizes_joined = "\n".join([f"{fold.value}: {fold_target_size[fold]}" for fold in DataFold])
     logger.info(f"Fold target sizes:\n{fold_sizes_joined}")
 
-    assert min(fold_target_size.values()) >= 0, "Target fold sizes must be positive"
+    assert min(fold_target_size.values()) >= 0, "Target fold sizes must be non-negative"
 
     data_grouped: dict[Bag[Molecule], list[ReactionSample]] = defaultdict(list)
     num_products_count: dict[int, int] = defaultdict(int)
@@ -241,12 +277,13 @@ def split_dataset(config: SplitDatasetConfig) -> None:
 
     random.shuffle(data_groups_left)
 
-    folds = list(DataFold)
-    current_fold = DataFold.TRAIN
+    # Make sure to never add samples to folds where the target size is zero.
+    folds = [fold for fold in DataFold if fold_target_size[fold] > 0]
+    current_fold = folds[0]
 
     for _, d_group in data_groups_left:
         if (
-            current_fold != DataFold.TEST
+            current_fold != folds[-1]
             and len(data_split[current_fold]) + len(d_group) > fold_target_size[current_fold]
         ):
             # If the current fold is full progress to the next one.
@@ -264,9 +301,12 @@ def split_dataset(config: SplitDatasetConfig) -> None:
 
     logger.info(f"Saving data under {config.output_dir}")
     for fold, datapoints in data_split.items():
+        if not datapoints:
+            continue  # Do not save files for empty folds
+
         random.shuffle(datapoints)
 
-        with open(Path(config.output_dir) / f"pista_{fold.value}.smi", "wt") as f:
+        with open(Path(config.output_dir) / f"{fold.value}.smi", "wt") as f:
             for datapoint in datapoints:
                 original_str = datapoint.metadata["original_str"]  # type: ignore[typeddict-item]
                 f.write(f"{original_str}\n")

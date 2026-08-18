@@ -10,15 +10,22 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 ### Changed
 
 - Make template extraction more robust ([#28](https://github.com/microsoft/retrochimera/pull/28)) ([@kmaziarz])
+- Improve the data filtering script ([#30](https://github.com/microsoft/retrochimera/pull/30)) ([@kmaziarz])
 - Remove dependency on `syntheseus-root-aligned` and vendor relevant utils ([#27](https://github.com/microsoft/retrochimera/pull/27)) ([@lgeiger])
 - Do not load template library in SMILES Transformer training ([#29](https://github.com/microsoft/retrochimera/pull/29)) ([@lgeiger])
 - Update `protobuf` dependency to 5.29.6 ([#25](https://github.com/microsoft/retrochimera/pull/25)) ([@kmaziarz])
+- Use default factories for nested dataclass fields ([#31](https://github.com/microsoft/retrochimera/pull/31)) ([@lgeiger])
 
 ### Added
 
 - Add support for model finetuning ([#21](https://github.com/microsoft/retrochimera/pull/21), [#24](https://github.com/microsoft/retrochimera/pull/24)) ([@kmaziarz])
 - Implement consensus mode for ensembling ([#26](https://github.com/microsoft/retrochimera/pull/26)) ([@kmaziarz])
+- Allow ensembling to consume eval outputs produced in resumable mode ([#32](https://github.com/microsoft/retrochimera/pull/32)) ([@kmaziarz])
 - Expose the forward model class externally ([#23](https://github.com/microsoft/retrochimera/pull/23)) ([@kmaziarz])
+
+### Fixed
+
+- Fix process leak in rule application server ([#33](https://github.com/microsoft/retrochimera/pull/33)) ([@kmaziarz])
 
 ## [1.2.0] - 2026-06-17
 

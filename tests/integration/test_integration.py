@@ -75,9 +75,9 @@ def test_split_dataset(split_output_dir: Path, deduplicate_output_path: Path) ->
     # - [C:1].CCC...>>[C:1]CCC...    product too large
     # - [C:1]CCCC.O>>[C:1]CCCC       product among the reactants
 
-    assert get_num_lines(split_output_dir / "pista_train.smi") == 527
-    assert get_num_lines(split_output_dir / "pista_val.smi") == 31
-    assert get_num_lines(split_output_dir / "pista_test.smi") == 62
+    assert get_num_lines(split_output_dir / "train.smi") == 527
+    assert get_num_lines(split_output_dir / "val.smi") == 31
+    assert get_num_lines(split_output_dir / "test.smi") == 62
 
 
 def test_extract_templates(split_output_dir: Path, processed_output_dir: Path) -> None:
@@ -321,14 +321,12 @@ def test_preprocess_and_train(
         extra_args=extra_args,
     )
 
-    # Next, test that the pretrained checkpoint can be fine-tuned on `pista_test.smi`.
+    # Next, test that the pretrained checkpoint can be fine-tuned on `test.smi`.
     finetune_split_dir = tmp_path / f"finetune_split_{testcase}"
     finetune_split_dir.mkdir()
-    test_reactions = (split_output_dir / "pista_test.smi").read_text().splitlines()
+    test_reactions = (split_output_dir / "test.smi").read_text().splitlines()
     for split_fold in ["train", "val", "test"]:
-        (finetune_split_dir / f"pista_{split_fold}.smi").write_text(
-            "\n".join(test_reactions) + "\n"
-        )
+        (finetune_split_dir / f"{split_fold}.smi").write_text("\n".join(test_reactions) + "\n")
 
     finetune_processed_dir = tmp_path / f"finetune_processed_{testcase}"
     run_with_python(
