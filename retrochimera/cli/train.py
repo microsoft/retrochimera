@@ -506,7 +506,7 @@ def build_model_from_config(
     logger.info(f"Building the model {config.model_class} with kwargs {model_kwargs}")
 
     model = model_class(**model_kwargs)
-    if not isinstance(model, SmilesTransformerModel):
+    if config.model_class is not ModelClass.SmilesTransformer:
         model.set_rulebase(rulebase=rulebase, rulebase_dir=rulebase_dir)
 
     return model, model_config
