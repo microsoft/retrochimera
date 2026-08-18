@@ -1,7 +1,6 @@
 import math
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Iterable, Optional, Union
+from typing import Iterable, Optional
 
 import torch
 from more_itertools import batched
@@ -9,7 +8,6 @@ from torch import nn
 from torch.nn.init import xavier_uniform_, zeros_
 from torch.optim.lr_scheduler import OneCycleLR
 
-from retrochimera.chem.rules import RuleBase
 from retrochimera.data.preprocessing.smiles_transformer import ProcessedSample, preprocess_samples
 from retrochimera.data.smiles_reaction_sample import SmilesReactionSample
 from retrochimera.data.smiles_tokenizer import Tokenizer
@@ -690,15 +688,8 @@ class SmilesTransformerModel(AbstractModel[SmilesReactionSample, ProcessedSample
         self, samples: Iterable[SmilesReactionSample], num_processes: int = 0
     ) -> Iterable[ProcessedSample]:
         yield from preprocess_samples(
-            samples=samples,
-            rulebase_dir=self.rulebase_dir,
-            tokenizer=self.tokenizer,
-            num_processes=num_processes,
+            samples=samples, tokenizer=self.tokenizer, num_processes=num_processes
         )
-
-    def set_rulebase(self, rulebase: RuleBase, rulebase_dir: Union[str, Path]) -> None:
-        # Inherited from other template-based models (Not used in this model now)
-        self.rulebase_dir = rulebase_dir
 
     def get_nontransferable_param_prefixes(self) -> list[str]:
         prefixes = ["token_fc."]

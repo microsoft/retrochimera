@@ -12,6 +12,7 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - Make template extraction more robust ([#28](https://github.com/microsoft/retrochimera/pull/28)) ([@kmaziarz])
 - Improve the data filtering script ([#30](https://github.com/microsoft/retrochimera/pull/30)) ([@kmaziarz])
 - Remove dependency on `syntheseus-root-aligned` and vendor relevant utils ([#27](https://github.com/microsoft/retrochimera/pull/27)) ([@lgeiger])
+- Do not load template library in SMILES Transformer training ([#29](https://github.com/microsoft/retrochimera/pull/29)) ([@lgeiger])
 - Update `protobuf` dependency to 5.29.6 ([#25](https://github.com/microsoft/retrochimera/pull/25)) ([@kmaziarz])
 - Use default factories for nested dataclass fields ([#31](https://github.com/microsoft/retrochimera/pull/31)) ([@lgeiger])
 

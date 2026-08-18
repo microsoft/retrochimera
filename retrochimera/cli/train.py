@@ -390,7 +390,7 @@ def train(
 
 
 def build_model_from_config(
-    config: ModelTrainingConfig, rulebase: RuleBase, rulebase_dir: Union[str, Path]
+    config: ModelTrainingConfig, rulebase: Optional[RuleBase], rulebase_dir: Union[str, Path]
 ) -> tuple[AbstractModel, Any]:
     model_class: Any = None
     model_config: Any = None
@@ -437,6 +437,7 @@ def build_model_from_config(
         )
 
         # Look through the rulebase to build the featurizer kwargs (e.g. atom SMARTS vocabulary).
+        assert rulebase is not None
         rewrite_featurizer_kwargs = rewrite_featurizer_class.prepare_kwargs(
             rewrites=(rule.rxn for rule in rulebase.rules.values())
         )
@@ -450,7 +451,7 @@ def build_model_from_config(
     # Add model kwargs that are shared across all models classes.
     model_kwargs.update(
         {
-            "n_classes": len(rulebase),
+            "n_classes": len(rulebase) if rulebase is not None else 0,
             "learning_rate": model_config.training.learning_rate,
             "learning_rate_decay_step_size": model_config.training.learning_rate_decay_step_size,
             "learning_rate_decay_rate": model_config.training.learning_rate_decay_rate,
@@ -472,6 +473,7 @@ def build_model_from_config(
             "rewrite_encoder_num_epochs",
         ]
         model_kwargs.update({key: getattr(model_config, key) for key in keys})
+        assert rulebase is not None
         model_kwargs["num_total_rewrite_lhs_atoms"] = sum(
             rule.rxn.rdkit_lhs_mol.GetNumAtoms() for rule in rulebase.rules.values()
         )
@@ -514,7 +516,8 @@ def build_model_from_config(
     logger.info(f"Building the model {config.model_class} with kwargs {model_kwargs}")
 
     model = model_class(**model_kwargs)
-    model.set_rulebase(rulebase=rulebase, rulebase_dir=rulebase_dir)
+    if config.model_class is not ModelClass.SmilesTransformer:
+        model.set_rulebase(rulebase=rulebase, rulebase_dir=rulebase_dir)
 
     return model, model_config
 
@@ -556,30 +559,28 @@ def main() -> None:
     set_random_seed(config.seed)
 
     processed_data_dir = Path(config.processed_data_dir)
-    processed_rulebase_path = processed_data_dir / RuleBase.DEFAULT_FILE_NAME
-
     checkpoint_dir = Path(config.checkpoint_dir)
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
-    checkpoint_rulebase_path = checkpoint_dir / RuleBase.DEFAULT_FILE_NAME
-
-    # Copy the rulebase into the checkpoint directory, which is only done by the first process
-    # (other training processes will be spawned in `train`).
-    if not checkpoint_rulebase_path.exists():
-        logger.info(f"Copying the rulebase into {config.checkpoint_dir}")
-        shutil.copy(processed_rulebase_path, checkpoint_rulebase_path)
 
     if config.model_class is ModelClass.SmilesTransformer:
         checkpoint_vocab_path = checkpoint_dir / SmilesTransformerModel.DEFAULT_VOCAB_FILE_NAME
-
+        rulebase = None
         if not checkpoint_vocab_path.exists():
             # For the SMILES Transformer we also copy the vocab file.
             logger.info(f"Copying the vocab file into {config.checkpoint_dir}")
             shutil.copy(config.smiles_transformer_config.vocab_path, checkpoint_vocab_path)
+    else:
+        processed_rulebase_path = processed_data_dir / RuleBase.DEFAULT_FILE_NAME
+        checkpoint_rulebase_path = checkpoint_dir / RuleBase.DEFAULT_FILE_NAME
+        # Copy the rulebase into the checkpoint directory, which is only done by the first process
+        # (other training processes will be spawned in `train`).
+        if not checkpoint_rulebase_path.exists():
+            logger.info(f"Copying the rulebase into {config.checkpoint_dir}")
+            shutil.copy(processed_rulebase_path, checkpoint_rulebase_path)
+        rulebase = RuleBase.load_from_file(dir=checkpoint_dir)
 
     model, model_config = build_model_from_config(
-        config=config,
-        rulebase=RuleBase.load_from_file(dir=checkpoint_dir),
-        rulebase_dir=checkpoint_dir,
+        config=config, rulebase=rulebase, rulebase_dir=checkpoint_dir
     )
 
     # Handle fine-tuning from a pretrained checkpoint
