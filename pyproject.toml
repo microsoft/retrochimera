@@ -20,6 +20,7 @@ dependencies = [
     "more_itertools",
     "omegaconf",
     "pebble~=5.2.0",
+    "scipy",
     "syntheseus>=0.8.0",
     "tqdm",
     "wandb",
