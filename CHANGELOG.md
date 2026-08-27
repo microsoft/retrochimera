@@ -22,6 +22,7 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - Implement consensus mode for ensembling ([#26](https://github.com/microsoft/retrochimera/pull/26)) ([@kmaziarz])
 - Allow ensembling to consume eval outputs produced in resumable mode ([#32](https://github.com/microsoft/retrochimera/pull/32)) ([@kmaziarz])
 - Expose the forward model class externally ([#23](https://github.com/microsoft/retrochimera/pull/23)) ([@kmaziarz])
+- Add config to set precision of torch fp32 matrix multiply ([#36](https://github.com/microsoft/retrochimera/pull/36)) ([@lgeiger])
 
 ### Fixed
 
