@@ -1,5 +1,13 @@
+from enum import Enum
+
 import torch
 from torch.optim.lr_scheduler import LambdaLR
+
+
+class Float32MatmulPrecision(Enum):
+    highest = "highest"
+    high = "high"
+    medium = "medium"
 
 
 def count_occurrences(indices: torch.Tensor) -> torch.Tensor:

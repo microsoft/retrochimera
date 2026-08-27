@@ -31,6 +31,7 @@ from retrochimera.models.template_classification import MCCModel
 from retrochimera.models.template_localization import TemplateLocalizationModel
 from retrochimera.utils.logging import get_logger
 from retrochimera.utils.misc import convert_camel_to_snake, lookup_by_name
+from retrochimera.utils.pytorch import Float32MatmulPrecision
 from retrochimera.utils.pytorch_lightning import ModelCheckpoint, OptLRMonitor, UnfreezeCallback
 from retrochimera.utils.training import (
     average_checkpoints,
@@ -202,6 +203,7 @@ class TrainConfig(ModelTrainingConfig):
     checkpoint_dir: str = MISSING  # Directory to store pytorch lightning model checkpoints
     log_dir: str = "."  # Directory to store logs
     seed: int = 0  # Seed to use for all sources of randomness (Python, numpy, torch)
+    float32_matmul_precision: Float32MatmulPrecision = Float32MatmulPrecision.highest
 
     num_processes_training: int = 1  # Number of processes to use for training
 
@@ -554,6 +556,7 @@ def main() -> None:
         sys.exit(0)
 
     config = parse_training_config(argv)
+    torch.set_float32_matmul_precision(config.float32_matmul_precision.value)
     logger.info(f"Running training with the following config: {config}")
 
     set_random_seed(config.seed)

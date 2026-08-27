@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
+import torch
 from omegaconf import MISSING
 from syntheseus.cli import eval_single_step as eval_syntheseus
 from syntheseus.reaction_prediction.inference.config import ModelConfig
@@ -26,6 +27,7 @@ from retrochimera.inference.smiles_transformer import SmilesTransformerModel
 from retrochimera.inference.smiles_transformer_forward import SmilesTransformerForwardModel
 from retrochimera.inference.template_classification import TemplateClassificationModel
 from retrochimera.inference.template_localization import TemplateLocalizationModel
+from retrochimera.utils.pytorch import Float32MatmulPrecision
 
 
 class BackwardModelClass(Enum):
@@ -47,11 +49,12 @@ class BackwardModelConfig(ModelConfig):
 class EvalConfig(BackwardModelConfig, eval_syntheseus.BaseEvalConfig):
     """Config for running evaluation on a given dataset."""
 
-    pass
+    float32_matmul_precision: Float32MatmulPrecision = Float32MatmulPrecision.highest
 
 
 def main(argv: Optional[list[str]]) -> None:
     config: EvalConfig = cli_get_config(argv=argv, config_cls=EvalConfig)
+    torch.set_float32_matmul_precision(config.float32_matmul_precision.value)
     eval_syntheseus.run_from_config(config, extra_steps=[])  # type: ignore
 
 
