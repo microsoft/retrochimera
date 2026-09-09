@@ -15,6 +15,7 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - Do not load template library in SMILES Transformer training ([#29](https://github.com/microsoft/retrochimera/pull/29)) ([@lgeiger])
 - Update `protobuf` dependency to 5.29.6 ([#25](https://github.com/microsoft/retrochimera/pull/25)) ([@kmaziarz])
 - Use default factories for nested dataclass fields ([#31](https://github.com/microsoft/retrochimera/pull/31)) ([@lgeiger])
+- Remove unused dependencies and unpin W&B ([#37](https://github.com/microsoft/retrochimera/pull/37)) ([@lgeiger])
 
 ### Added
 
