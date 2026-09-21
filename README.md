@@ -67,6 +67,14 @@ Finally, we release a [forward model checkpoint](https://figshare.com/ndownloade
 > In particular, **reactions ranked lower in the output list are increasingly likely to be hallucinations**;
 > we recommend requesting no more than 5-10 reactions per input unless paired with stringent filtering (see e.g. [[1]](https://www.nature.com/articles/nature25978)[[2]](https://pubs.acs.org/doi/10.1021/acs.accounts.5c00155))
 >
+> Although the Pistachio checkpoint is already highly capable, users should consider the following limitations and recommendations:
+>
+> 1. The checkpoint was trained on reaction data available through 2023 and therefore does not incorporate more recent chemistry.
+> 2. Because the Pistachio dataset contains some noise, predictions should be grounded in relevant literature and independently verified.
+> 3. Performance may be lower for chemistry that differs substantially from the Pistachio training distribution, including specialized academic and natural-product synthesis.
+> 4. We recommend pairing RetroChimera with a reaction-feasibility model and using consensus mode.
+> 5. For domain-specific applications, we recommend fine-tuning the checkpoint on relevant electronic laboratory notebook (ELN) data or literature reactions, as described in the paper.
+>
 > If you find that RetroChimera 1 doesn't work on your favourite drug-like molecule, please let us know at retrochimera@microsoft.com, so we can make sure we improve this in the next model version.
 
 ## Citation
