@@ -188,17 +188,24 @@ class Translator(object):
         if fn_map_state is not None:
             self.model.decoder.map_state(fn_map_state, only_map_src=True)
 
-        memory_bank_bt = memory_bank.transpose(0, 1).contiguous()
-        src_pad_len = memory_bank_bt.size(1)
+        if isinstance(memory_bank, tuple):
+            memory_bank_bt = tuple(x.transpose(0, 1).contiguous() for x in memory_bank)
+            src_pad_len = memory_bank_bt[0].size(1)
+            memory_device = memory_bank_bt[0].device
+        else:
+            tensor_memory_bank_bt = memory_bank.transpose(0, 1).contiguous()
+            memory_bank_bt = tensor_memory_bank_bt
+            src_pad_len = tensor_memory_bank_bt.size(1)
+            memory_device = tensor_memory_bank_bt.device
         memory_padding_mask = torch.arange(
-            0, src_pad_len, device=memory_bank_bt.device
+            0, src_pad_len, device=memory_device
         ) >= memory_lengths.unsqueeze(1)
 
         complete_seq_log_prob = None
         if self.customised_beam_search:
             vocab_size = self._tgt_vocab_len
             complete_seq_log_prob = torch.full(
-                (1, vocab_size), -1e5, device=memory_bank_bt.device, dtype=torch.float32
+                (1, vocab_size), -1e5, device=memory_device, dtype=torch.float32
             )
             complete_seq_log_prob[:, self._tgt_eos_idx] = 0.0
 
@@ -241,14 +248,15 @@ class Translator(object):
 
             decode_strategy.advance(log_probs, attn)
             any_finished = decode_strategy.is_finished.any()
+            source_rows_compacted = False
             if any_finished:
-                decode_strategy.update_finished()
+                source_rows_compacted = bool(decode_strategy.update_finished())
                 if decode_strategy.done:
                     break
 
             select_indices = decode_strategy.select_indices  # type: ignore
 
-            if any_finished:
+            if source_rows_compacted:
                 # Reorder states.
                 if isinstance(memory_bank_bt, tuple):
                     memory_bank_bt = tuple(
@@ -263,9 +271,12 @@ class Translator(object):
                 if src_map is not None:
                     src_map = src_map.index_select(1, select_indices)
 
-            if parallel_paths > 1 or any_finished:
+            if select_indices is not None:
                 self.model.decoder.map_state(
-                    lambda state, dim: state.index_select(dim, select_indices)
+                    lambda state, dim: state.index_select(dim, select_indices),
+                    map_src=source_rows_compacted,
+                    map_context=source_rows_compacted,
+                    map_self=True,
                 )
 
         return self.report_results(

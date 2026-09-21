@@ -438,17 +438,30 @@ class TransformerDecoderBase(nn.Module):
         """Initialize decoder state."""
         self.state["src"] = src  # torch.Tensor: (padded_src_len, batch_size, 1)
 
-    def map_state(self, fn, only_map_src=False):
-        if self.state["src"] is not None:
+    def map_state(
+        self,
+        fn,
+        only_map_src=False,
+        *,
+        map_src=True,
+        map_context=True,
+        map_self=True,
+    ):
+        """Map selected decoder state tensors with backward-compatible defaults."""
+        if only_map_src:
+            map_context = False
+            map_self = False
+
+        if map_src and self.state["src"] is not None:
             self.state["src"] = fn(self.state["src"], 1)
 
-        if not only_map_src:
-            for layer in self.transformer_layers:
-                if hasattr(layer, "context_attn"):
-                    if layer.context_attn.layer_cache[1]["keys"].numel() != 0:
-                        x = fn(layer.context_attn.layer_cache[1]["keys"], 0)
-                        y = fn(layer.context_attn.layer_cache[1]["values"], 0)
-                        layer.context_attn.layer_cache = True, {"keys": x, "values": y}
+        for layer in self.transformer_layers:
+            if map_context and hasattr(layer, "context_attn"):
+                if layer.context_attn.layer_cache[1]["keys"].numel() != 0:
+                    x = fn(layer.context_attn.layer_cache[1]["keys"], 0)
+                    y = fn(layer.context_attn.layer_cache[1]["values"], 0)
+                    layer.context_attn.layer_cache = True, {"keys": x, "values": y}
+            if map_self:
                 if isinstance(layer.self_attn, AverageAttention):
                     if layer.self_attn.layer_cache[1]["prev_g"].numel() != 0:
                         x = fn(layer.self_attn.layer_cache[1]["prev_g"], 0)

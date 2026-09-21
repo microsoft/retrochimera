@@ -116,7 +116,7 @@ class RetroChimeraModel(ExternalBackwardReactionModel):
         if self._cached_streams is not None and self._cached_executor is not None:
 
             def _run(model, stream):
-                with torch.cuda.stream(stream):
+                with torch.no_grad(), torch.cuda.stream(stream):
                     out = model(inputs=inputs, num_results=num_results)
                 stream.synchronize()
                 return out

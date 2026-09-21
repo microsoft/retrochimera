@@ -1,8 +1,10 @@
 import argparse
 import math
-import multiprocessing
+import random
 from abc import abstractmethod
-from typing import Any, Generic, Sequence, TypeVar
+from concurrent.futures import Executor
+from contextlib import nullcontext
+from typing import Any, Generic, Optional, Sequence, TypeVar
 
 import torch
 from syntheseus import Molecule, Reaction, SingleProductReaction
@@ -12,14 +14,24 @@ from syntheseus.reaction_prediction.utils.inference import (
     get_unique_file_in_dir,
     process_raw_smiles_outputs_backwards,
 )
-from syntheseus.reaction_prediction.utils.misc import suppress_outputs
+from syntheseus.reaction_prediction.utils.misc import cpu_count, suppress_outputs
 
 from retrochimera.models.smiles_transformer import SmilesTransformerModel as TransformerModel
 from retrochimera.opennmt.decode.translator import Translator
 from retrochimera.utils.logging import get_logger
-from retrochimera.utils.root_aligned import clear_map_canonical_smiles, get_product_roots
+from retrochimera.utils.root_aligned import (
+    AUGMENTATION_SEED_METADATA_KEY,
+    clear_map_canonical_smiles,
+    get_product_roots,
+)
 
 logger = get_logger(__name__)
+
+
+def _get_reusable_executor(max_workers: int) -> Executor:
+    from joblib.externals.loky import get_reusable_executor
+
+    return get_reusable_executor(max_workers=max_workers, timeout=300)
 
 
 InputType = TypeVar("InputType")
@@ -35,6 +47,8 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
         max_generated_seq_len: int = 512,
         probability_from_score_temperature: float = 3.0,
         filter_duplicate_augmentations: bool = True,
+        canonicalization_processes: int = min(16, max(1, cpu_count() // 2)),
+        inference_precision: str = "auto",
         **kwargs,
     ) -> None:
         """Initializes the SmilesTransformer model wrapper.
@@ -52,6 +66,40 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
             raise ValueError(
                 "Class based on `AbstractSmilesTransformerModel` should extended `ReactionModel`"
             )
+
+        device = getattr(self, "device")
+
+        def cuda_bf16_supported() -> bool:
+            with torch.cuda.device(device):
+                return torch.cuda.is_bf16_supported()
+
+        if inference_precision == "auto":
+            if device.startswith("cuda"):
+                inference_precision = "bfloat16" if cuda_bf16_supported() else "float16"
+            else:
+                inference_precision = "float32"
+
+        precision_to_dtype = {
+            "float32": None,
+            "float16": torch.float16,
+            "bfloat16": torch.bfloat16,
+        }
+        if inference_precision not in precision_to_dtype:
+            raise ValueError(
+                f"Unsupported inference_precision {inference_precision}; "
+                f"expected one of {sorted(precision_to_dtype)}"
+            )
+        if (
+            inference_precision == "bfloat16"
+            and device.startswith("cuda")
+            and not cuda_bf16_supported()
+        ):
+            raise ValueError("bfloat16 inference is not supported on this CUDA device")
+        if canonicalization_processes <= 0:
+            raise ValueError("canonicalization_processes must be positive")
+        self._canonicalization_processes = canonicalization_processes
+        self._canonicalization_pool: Optional[Executor] = None
+        self._autocast_dtype = precision_to_dtype[inference_precision]
 
         # There should be exaclty one `*.ckpt` file under `model_dir`.
         chkpt_path = get_unique_file_in_dir(self.model_dir, pattern="*.ckpt")
@@ -79,6 +127,20 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
         logger.info(f"Augmentation size: {self.augmentation_size}")
         logger.info(f"Maximum generated sequence length: {self.max_generated_seq_len}")
         logger.info(f"Filter duplicate augmentations: {self.filter_duplicate_augmentations}")
+        logger.info(f"Canonicalization processes: {self._canonicalization_processes}")
+        logger.info(f"Inference precision: {inference_precision}")
+
+    def _get_canonicalization_pool(self) -> Executor:
+        if self._canonicalization_pool is None:
+            self._canonicalization_pool = _get_reusable_executor(self._canonicalization_processes)
+        return self._canonicalization_pool
+
+    def _autocast_context(self):
+        return (
+            torch.autocast(device_type="cuda", dtype=self._autocast_dtype)
+            if self._autocast_dtype is not None and getattr(self, "device").startswith("cuda")
+            else nullcontext()
+        )
 
     def get_parameters(self):
         return self.model.parameters()
@@ -189,7 +251,8 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
         batch["src"] = src  # tuple[Tensor, Tensor]: (padded_src_len, batch_size, 1), (batch_size,)
         batch["batch_size"] = batch_size
 
-        translate_results = translator.translate_batch(batch, attn_debug=False)
+        with self._autocast_context():
+            translate_results = translator.translate_batch(batch, attn_debug=False)
         augmented_batch_output_token_ids = translate_results[
             "predictions"
         ]  # list[list[LongTensor]]: For each batch, holds a list of beam prediction sequences
@@ -211,14 +274,9 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
                 assert isinstance(line[0], str)
                 lines.append((line[0], augmented_batch_scores[i][j]))
 
-        raw_predictions = []
-        pool = multiprocessing.Pool(4)
-
-        raw_predictions = pool.map(
-            func=canonicalize_smiles_clear_map, iterable=lines
+        raw_predictions = list(
+            self._get_canonicalization_pool().map(canonicalize_smiles_clear_map, lines)
         )  # canonicalize reactants and modify illegal reactants into empty strings
-        pool.close()
-        pool.join()
 
         predictions = []
         left_index = 0
@@ -272,7 +330,8 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
         self, reaction_smiles: list[str], minibatch_size: int = 32
     ) -> tuple[list[float], list[float]]:
         """Compute total and average probabilities for a list of reaction SMILES strings."""
-        return self.model.compute_probs(reaction_smiles, minibatch_size=minibatch_size)
+        with torch.inference_mode(), self._autocast_context():
+            return self.model.compute_probs(reaction_smiles, minibatch_size=minibatch_size)
 
 
 class SmilesTransformerModel(
@@ -280,10 +339,13 @@ class SmilesTransformerModel(
 ):
     def _augment_input(self, input: Molecule) -> list[str]:
         augmented_input = []
+        augmentation_seed = input.metadata.get(AUGMENTATION_SEED_METADATA_KEY)
+        rng = random.Random(augmentation_seed) if augmentation_seed is not None else None
 
         product_roots = get_product_roots(
             product_atom_ids=[i + 1 for i in range(input.rdkit_mol.GetNumAtoms())],
             num_augmentations=self.augmentation_size,
+            rng=rng,
         )
 
         for pro_root_atom_id in product_roots:
