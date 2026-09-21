@@ -72,7 +72,7 @@ Finally, we release a [forward model checkpoint](https://figshare.com/ndownloade
 > 1. The checkpoint was trained on reaction data available through 2023 and therefore does not incorporate more recent chemistry.
 > 2. Because the Pistachio dataset contains some noise, predictions should be grounded in relevant literature and independently verified.
 > 3. Performance may be lower for chemistry that differs substantially from the Pistachio training distribution, including specialized academic and natural-product chemistry.
-> 4. We recommend pairing RetroChimera with a reaction-feasibility model and using consensus mode.
+> 4. We recommend pairing RetroChimera with a [reaction-feasibility model](https://github.com/microsoft/syntheseus/blob/f48d33c00050100d5315c1965c5e198ac8460a1f/syntheseus/reaction_prediction/filters/wrapper.py#L13) and using [consensus mode](https://github.com/microsoft/retrochimera/pull/26).
 > 5. For domain-specific applications, we recommend fine-tuning the checkpoint on relevant electronic laboratory notebook (ELN) data or literature reactions, as described in the paper.
 >
 > If you find that RetroChimera 1 doesn't work on your favourite drug-like molecule, please let us know at retrochimera@microsoft.com, so we can make sure we improve this in the next model version.
