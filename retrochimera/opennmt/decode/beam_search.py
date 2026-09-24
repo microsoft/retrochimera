@@ -13,6 +13,8 @@ Modifications:
 2. Introduced the `customised_beam_search` attribute and corresponding logic to the `BeamSearch` class, enabling optimized beam search for retrosynthesis prediction.
 3. Snapshot tensors to CPU in `update_finished` once instead of per each access.
 """
+from typing import cast
+
 import torch
 
 from retrochimera.opennmt.decode.decoder_strategy import DecodeStrategy
@@ -201,7 +203,8 @@ class BeamSearch(DecodeStrategy):
         topk_scores, topk_ids = torch.topk(curr_scores, self.beam_size, dim=-1)
         return topk_scores, topk_ids
 
-    def update_finished(self):
+    def update_finished(self) -> bool:
+        """Update completed hypotheses and report whether source rows were compacted."""
         # Penalize beams that finished.
         _B_old = self.topk_log_probs.shape[0]
         step = self.alive_seq.shape[-1]  # 1 greater than the step in advance
@@ -216,11 +219,13 @@ class BeamSearch(DecodeStrategy):
         self.is_finished = self.is_finished.to("cpu")
         self.top_beam_finished |= self.is_finished[:, 0].eq(1)
         predictions = self.alive_seq.view(_B_old, self.beam_size, step)
+        alive_attn = cast(torch.Tensor, self.alive_attn)
         attention = (
-            self.alive_attn.view(step - 1, _B_old, self.beam_size, self.alive_attn.size(-1))
+            alive_attn.view(step - 1, _B_old, self.beam_size, alive_attn.size(-1))
             if self.alive_attn is not None
             else None
         )
+        memory_lengths = cast(torch.Tensor, self.memory_lengths)
 
         # Snapshot to CPU once instead of having this done implicitly per each access.
         predictions_cpu = predictions.to("cpu", non_blocking=False)
@@ -241,7 +246,7 @@ class BeamSearch(DecodeStrategy):
                         (
                             topk_scores_cpu[i, j],
                             predictions_cpu[i, j, 1:],  # Ignore start_token.
-                            attention[:, i, j, : self.memory_lengths[i]]
+                            cast(torch.Tensor, attention)[:, i, j, : memory_lengths[i]]
                             if attention is not None
                             else None,
                         )
@@ -255,7 +260,7 @@ class BeamSearch(DecodeStrategy):
                             (
                                 topk_scores_cpu[i, j],
                                 predictions_cpu[i, j, 1:],  # Ignore start_token.
-                                attention[:, i, j, : self.memory_lengths[i]]
+                                cast(torch.Tensor, attention)[:, i, j, : memory_lengths[i]]
                                 if attention is not None
                                 else None,
                             )
@@ -287,10 +292,11 @@ class BeamSearch(DecodeStrategy):
         # If all sentences are translated, no need to go further.
         if len(non_finished) == 0:
             self.done = True
-            return
+            return False
 
         _B_new = non_finished.shape[0]
         self.remove_finished_batches(_B_new, _B_old, non_finished, predictions, attention, step)
+        return _B_new < _B_old
 
     def remove_finished_batches(self, _B_new, _B_old, non_finished, predictions, attention, step):
         # Remove finished batches for the next step.

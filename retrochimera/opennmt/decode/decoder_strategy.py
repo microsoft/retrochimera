@@ -398,11 +398,12 @@ class DecodeStrategy(object):
 
         raise NotImplementedError()
 
-    def update_finished(self):
+    def update_finished(self) -> bool:
         """DecodeStrategy subclasses should override :func:`update_finished()`.
 
         ``update_finished`` is used to update ``self.predictions``,
-        ``self.scores``, and other "output" attributes.
+        ``self.scores``, and other "output" attributes. Returns whether active
+        source rows were compacted.
         """
 
         raise NotImplementedError()
