@@ -27,7 +27,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["coverage", "pytest"]
+dev = ["pytest", "pytest-cov>=7", "pytest-xdist"]
 graphium = ["syntheseus-graphium==0.1.0"]
 all = ["retrochimera[dev,graphium]"]
 
@@ -59,6 +59,7 @@ exclude = '''
 
 [tool.coverage.run]
 include = ["./retrochimera/*"]
+patch = ["subprocess"]
 
 [tool.isort]
 profile = "black"

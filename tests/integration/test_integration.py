@@ -24,7 +24,7 @@ NUM_SAMPLES = 30  # For truncating training data.
 
 def run_with_python(path: str, args: list[str]) -> subprocess.CompletedProcess:
     return subprocess.run(
-        [sys.executable, "-m", "coverage", "run", "--source", "./retrochimera/", "-p", path] + args,
+        [sys.executable, path] + args,
         capture_output=True,
         check=True,
     )

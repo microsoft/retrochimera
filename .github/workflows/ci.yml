@@ -43,9 +43,11 @@ jobs:
           pip install .[all]
       - name: Run pytest
         run: |
-          coverage run -p -m pytest \
+          pytest \
+            -n auto \
+            --dist loadscope \
+            --cov=retrochimera \
+            --cov-report=term \
             --verbose \
             --durations=50 \
             --durations-min=1.0
-          coverage combine
-          coverage report
