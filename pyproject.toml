@@ -17,6 +17,7 @@ dynamic = ["version"]
 dependencies = [
     "h5py",
     "joblib",
+    "loky",
     "more_itertools",
     "omegaconf",
     "pebble~=5.2.0",

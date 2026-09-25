@@ -13,6 +13,8 @@ Modifications:
 2. Introduced the `customised_beam_search` attribute and corresponding logic to the `BeamSearch` class, enabling optimized beam search for retrosynthesis prediction.
 3. Snapshot tensors to CPU in `update_finished` once instead of per each access.
 """
+from typing import Optional
+
 import torch
 
 from retrochimera.opennmt.decode.decoder_strategy import DecodeStrategy
@@ -107,7 +109,7 @@ class BeamSearch(DecodeStrategy):
         self.select_indices = None
         self.done = False
         # "global state" of the old beam
-        self.memory_lengths = None
+        self.memory_lengths: Optional[torch.Tensor] = None
 
         self.customised_beam_search = customised_beam_search
 
@@ -201,7 +203,9 @@ class BeamSearch(DecodeStrategy):
         topk_scores, topk_ids = torch.topk(curr_scores, self.beam_size, dim=-1)
         return topk_scores, topk_ids
 
-    def update_finished(self):
+    def update_finished(self) -> bool:
+        """Update completed hypotheses and report whether source rows were compacted."""
+        assert self.memory_lengths is not None, "Beam search must be initialized before updating."
         # Penalize beams that finished.
         _B_old = self.topk_log_probs.shape[0]
         step = self.alive_seq.shape[-1]  # 1 greater than the step in advance
@@ -287,10 +291,11 @@ class BeamSearch(DecodeStrategy):
         # If all sentences are translated, no need to go further.
         if len(non_finished) == 0:
             self.done = True
-            return
+            return False
 
         _B_new = non_finished.shape[0]
         self.remove_finished_batches(_B_new, _B_old, non_finished, predictions, attention, step)
+        return _B_new < _B_old
 
     def remove_finished_batches(self, _B_new, _B_old, non_finished, predictions, attention, step):
         # Remove finished batches for the next step.

@@ -11,6 +11,7 @@ Original Source: https://github.com/OpenNMT/OpenNMT-py/blob/v3.5.1/onmt/translat
 """
 import random
 from copy import deepcopy
+from typing import Optional
 
 import numpy as np
 import torch
@@ -180,7 +181,7 @@ class DecodeStrategy(object):
         self.attention: list = [[] for _ in range(batch_size)]
         self.hypotheses: list = [[] for _ in range(batch_size)]
 
-        self.alive_attn = None
+        self.alive_attn: Optional[torch.Tensor] = None
         self.done = False
 
         n_paths = batch_size * parallel_paths
@@ -398,11 +399,12 @@ class DecodeStrategy(object):
 
         raise NotImplementedError()
 
-    def update_finished(self):
+    def update_finished(self) -> bool:
         """DecodeStrategy subclasses should override :func:`update_finished()`.
 
         ``update_finished`` is used to update ``self.predictions``,
-        ``self.scores``, and other "output" attributes.
+        ``self.scores``, and other "output" attributes. Returns whether active
+        source rows were compacted.
         """
 
         raise NotImplementedError()
