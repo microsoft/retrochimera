@@ -5,21 +5,40 @@ https://github.com/otori-bird/retrosynthesis/blob/main/preprocessing/generate_Pt
 """
 
 import random
+from typing import Optional
 
 import numpy as np
 from rdkit import Chem
 
+AUGMENTATION_SEED_METADATA_KEY = "retrochimera_augmentation_seed"
 
-def get_product_roots(product_atom_ids: list[int], num_augmentations: int) -> list[int]:
+
+def get_product_roots(
+    product_atom_ids: list[int],
+    num_augmentations: int,
+    rng: Optional[random.Random] = None,
+) -> list[int]:
     product_roots = [-1]
 
     if len(product_atom_ids) < num_augmentations:
         product_roots.extend(product_atom_ids)
-        product_roots.extend(
-            random.choices(product_roots, k=num_augmentations - len(product_roots))
-        )
+        if rng is None:
+            extra_roots = random.choices(
+                product_roots,
+                k=num_augmentations - len(product_roots),
+            )
+        else:
+            extra_roots = rng.choices(
+                product_roots,
+                k=num_augmentations - len(product_roots),
+            )
+        product_roots.extend(extra_roots)
     else:
-        product_roots.extend(random.sample(product_atom_ids, num_augmentations - 1))
+        if rng is None:
+            sampled_roots = random.sample(product_atom_ids, num_augmentations - 1)
+        else:
+            sampled_roots = rng.sample(product_atom_ids, num_augmentations - 1)
+        product_roots.extend(sampled_roots)
 
     assert len(product_roots) == num_augmentations
     return product_roots

@@ -1,5 +1,6 @@
 import argparse
 import math
+import random
 from abc import abstractmethod
 from typing import Any, Generic, Sequence, TypeVar
 
@@ -17,7 +18,11 @@ from syntheseus.reaction_prediction.utils.misc import cpu_count, suppress_output
 from retrochimera.models.smiles_transformer import SmilesTransformerModel as TransformerModel
 from retrochimera.opennmt.decode.translator import Translator
 from retrochimera.utils.logging import get_logger
-from retrochimera.utils.root_aligned import clear_map_canonical_smiles, get_product_roots
+from retrochimera.utils.root_aligned import (
+    AUGMENTATION_SEED_METADATA_KEY,
+    clear_map_canonical_smiles,
+    get_product_roots,
+)
 
 logger = get_logger(__name__)
 
@@ -285,10 +290,13 @@ class SmilesTransformerModel(
 ):
     def _augment_input(self, input: Molecule) -> list[str]:
         augmented_input = []
+        augmentation_seed = input.metadata.get(AUGMENTATION_SEED_METADATA_KEY)
+        rng = random.Random(augmentation_seed) if augmentation_seed is not None else None
 
         product_roots = get_product_roots(
             product_atom_ids=[i + 1 for i in range(input.rdkit_mol.GetNumAtoms())],
             num_augmentations=self.augmentation_size,
+            rng=rng,
         )
 
         for pro_root_atom_id in product_roots:
