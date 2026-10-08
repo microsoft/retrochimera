@@ -46,6 +46,24 @@ for p in predictions[0]:
     print(p, f"({100. * p.metadata['probability']:.2f}%)")
 ```
 
+Multi-target graph search runs searches concurrently and dynamically batches calls to the
+single-step model:
+
+```bash
+python -m retrochimera.cli.run_search \
+    model_class=RetroChimera \
+    model_dir=/model/checkpoint/dir/ \
+    inventory_smiles_file=/data/inventory.smi \
+    search_targets_file=/data/targets.smi \
+    results_dir=/data/results/
+```
+
+The defaults keep up to 32 searches active and use two model replicas, each forming batches of up
+to eight molecules with a 500 ms fill window. Configure these with `max_active_searches`,
+`inference_replicas`, `inference_batch_size`, and `inference_batch_wait_s`. Rule-worker processes
+are divided across replicas unless `num_processes` is set explicitly. Concurrent search writes one
+indexed directory per target and does not support route plotting, lock-file recovery, or resuming.
+
 For installation, there are two additional dependency groups: `dev` for running tests, and `graphium` for building the model architecture we used for USPTO-50K; if you care about running the USPTO-50K checkpoint, you need to install via `pip install retrochimera[graphium]`.
 
 If you want to train your own checkpoint, please follow the instructions in [`retrochimera/README.md`](retrochimera/README.md).
