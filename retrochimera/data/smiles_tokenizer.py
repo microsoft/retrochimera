@@ -13,7 +13,7 @@ DEFAULT_BEGIN_TOKEN = "<BOS>"
 DEFAULT_END_TOKEN = "<EOS>"
 DEFAULT_PAD_TOKEN = "<PAD>"
 DEFAULT_UNK_TOKEN = "<UNK>"
-PATTERN = "(\[[^\]]+]|Br?|Cl?|N|O|S|P|F|I|b|c|n|o|s|p|\(|\)|\.|=|#|-|\+|\\\\|\/|:|~|@|\?|>|\*|\$|\%[0-9]{2}|[0-9])"
+PATTERN = r"(\[[^\]]+]|Br?|Cl?|N|O|S|P|F|I|b|c|n|o|s|p|\(|\)|\.|=|#|-|\+|\\|\/|:|~|@|\?|>|\*|\$|\%[0-9]{2}|[0-9])"
 REGEX = re.compile(PATTERN)
 
 logger = get_logger(__name__)
