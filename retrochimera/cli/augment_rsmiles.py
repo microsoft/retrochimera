@@ -244,8 +244,6 @@ def run_from_config(config: AugmentRSMILESConfig) -> None:
             map(lambda x: x["mapped_reaction_smiles"].split(">")[2], reaction_list)
         )
 
-        augmented_data_fold_dir = os.path.join(augmented_data_dir, fold.value)
-
         # Prevent reactions with multiple products.
         multiple_product_indices = [
             i for i in range(len(product_smarts_list)) if "." in product_smarts_list[i]
@@ -253,7 +251,7 @@ def run_from_config(config: AugmentRSMILESConfig) -> None:
         assert len(multiple_product_indices) == 0, "Multiple products are not supported."
 
         preprocess(
-            augmented_data_fold_dir,
+            augmented_data_dir,
             reaction_list,
             fold,
             config.augmentation,
