@@ -12,10 +12,12 @@ import re
 from dataclasses import dataclass, field
 from typing import Optional
 
+import joblib
 from omegaconf import MISSING
 from rdkit import Chem, RDLogger
 from syntheseus.reaction_prediction.data.dataset import DataFold
 from syntheseus.reaction_prediction.utils.config import get_config as cli_get_config
+from syntheseus.reaction_prediction.utils.misc import cpu_count
 from tqdm import tqdm
 
 from retrochimera.utils.logging import get_logger
@@ -41,10 +43,12 @@ class AugmentRSMILESConfig:
     augmentation: int = 1  # Number of augmentations per reaction
     seed: int = 33  # Random seed for reproducibility
     use_random_smiles: bool = False  # If set, use random SMILES instead of root-aligned
+    num_processes: int = cpu_count()  # Number of parallel processes to use
 
 
 def multi_process(data: dict):
     """Multi-process function to process the data."""
+    random.seed(data["seed"])
     reaction = data["reaction"]
     augmentation = data["augmentation"]
 
@@ -152,6 +156,8 @@ def preprocess(
     fold: DataFold,
     augmentation: int = 1,
     use_random_smiles: bool = False,
+    num_processes: int = cpu_count(),
+    seed: int = 33,
 ) -> None:
     """Preprocess reaction data to extract graph adjacency matrix and features."""
 
@@ -163,6 +169,7 @@ def preprocess(
             "reaction": reaction_list[i],
             "augmentation": augmentation,
             "use_random_smiles": use_random_smiles,
+            "seed": seed + i,
         }
         for i in range(len(reaction_list))
     ]
@@ -178,7 +185,8 @@ def preprocess(
         "empty_r": 0,
     }
 
-    results = [multi_process(sample) for sample in tqdm(data)]
+    pool = joblib.Parallel(n_jobs=num_processes)
+    results = pool(joblib.delayed(multi_process)(sample) for sample in tqdm(data))
 
     with open(os.path.join(augmented_data_dir, f"{fold.value}.jsonl"), "w") as f:
         for result in tqdm(results):
@@ -204,8 +212,6 @@ def preprocess(
 
 def run_from_config(config: AugmentRSMILESConfig) -> None:
     logger.info(f"Preprocessing dataset from {config.data_dir}")
-
-    random.seed(config.seed)
 
     data_dir = config.data_dir
     augmented_data_dir = config.augmented_data_dir
@@ -239,6 +245,8 @@ def run_from_config(config: AugmentRSMILESConfig) -> None:
             fold,
             config.augmentation,
             use_random_smiles=config.use_random_smiles,
+            num_processes=config.num_processes,
+            seed=config.seed,
         )
 
 
