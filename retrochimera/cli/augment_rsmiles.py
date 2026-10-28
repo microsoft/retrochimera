@@ -9,11 +9,12 @@ import json
 import os
 import random
 import re
+from concurrent.futures import TimeoutError
 from dataclasses import dataclass, field
 from typing import Optional
 
-import joblib
 from omegaconf import MISSING
+from pebble import ProcessPool
 from rdkit import Chem, RDLogger
 from syntheseus.reaction_prediction.data.dataset import DataFold
 from syntheseus.reaction_prediction.utils.config import get_config as cli_get_config
@@ -44,6 +45,7 @@ class AugmentRSMILESConfig:
     seed: int = 33  # Random seed for reproducibility
     use_random_smiles: bool = False  # If set, use random SMILES instead of root-aligned
     num_processes: int = cpu_count()  # Number of parallel processes to use
+    timeout: Optional[int] = None  # Timeout per reaction (in seconds) for augmentation
 
 
 def multi_process(data: dict):
@@ -158,6 +160,7 @@ def preprocess(
     use_random_smiles: bool = False,
     num_processes: int = cpu_count(),
     seed: int = 33,
+    timeout: Optional[int] = None,
 ) -> None:
     """Preprocess reaction data to extract graph adjacency matrix and features."""
 
@@ -183,10 +186,20 @@ def preprocess(
         "error_mapping_p": 0,
         "empty_p": 0,
         "empty_r": 0,
+        "timeout": 0,
     }
 
-    pool = joblib.Parallel(n_jobs=num_processes)
-    results = pool(joblib.delayed(multi_process)(sample) for sample in tqdm(data))
+    results = []
+    with ProcessPool(max_workers=num_processes) as pool:
+        futures = [pool.schedule(multi_process, args=(sample,), timeout=timeout) for sample in data]
+        for i, future in enumerate(tqdm(futures, desc="Augmenting reactions")):
+            try:
+                results.append(future.result())
+            except TimeoutError:
+                skip_dict["timeout"] += 1
+                logger.warning(
+                    f"Augmentation timed out for sample {i}: {reaction_list[i]['mapped_reaction_smiles']}"
+                )
 
     with open(os.path.join(augmented_data_dir, f"{fold.value}.jsonl"), "w") as f:
         for result in tqdm(results):
@@ -247,6 +260,7 @@ def run_from_config(config: AugmentRSMILESConfig) -> None:
             use_random_smiles=config.use_random_smiles,
             num_processes=config.num_processes,
             seed=config.seed,
+            timeout=config.timeout,
         )
 
 
