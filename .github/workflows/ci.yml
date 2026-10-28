@@ -26,9 +26,6 @@ jobs:
           pre-commit run --verbose --all-files
   tests:
     runs-on: ubuntu-latest
-    env:
-      # Temporarily disable sharded repodata until fixed upstream.
-      MAMBA_USE_SHARDED_REPODATA: "false"
     defaults:
       run:
         shell: bash -l {0}
@@ -38,7 +35,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: conda-incubator/setup-miniconda@be893c923ea9cf1cf7cd510fbdde27c7e18cbdcb # v4.1.0
         with:
-          mamba-version: "<2.10.0"
+          use-mamba: false
+          conda-solver: classic
           channels: conda-forge,defaults
           channel-priority: true
           environment-file: environment.yml
