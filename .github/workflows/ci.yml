@@ -26,9 +26,6 @@ jobs:
           pre-commit run --verbose --all-files
   tests:
     runs-on: ubuntu-latest
-    env:
-      # Temporarily disable sharded repodata until fixed upstream.
-      MAMBA_USE_SHARDED_REPODATA: "false"
     defaults:
       run:
         shell: bash -l {0}
@@ -36,11 +33,8 @@ jobs:
       - name: Free extra disk space
         uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: conda-incubator/setup-miniconda@be893c923ea9cf1cf7cd510fbdde27c7e18cbdcb # v4.1.0
+      - uses: mamba-org/setup-micromamba@f457c30a868e4760d3a6fcea5f25dc655b8edf39 # v3.2.1
         with:
-          mamba-version: "*"
-          channels: conda-forge,defaults
-          channel-priority: true
           environment-file: environment.yml
       - name: Install RetroChimera
         run: |
