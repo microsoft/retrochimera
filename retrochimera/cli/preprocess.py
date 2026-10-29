@@ -51,14 +51,15 @@ def main() -> None:
         logger.info(f"Processed data file {processed_data_path} exists, nothing to do")
         return
 
-    if config.rulebase_min_rule_support is None and config.rulebase_max_num_rules is None:
-        logger.warning("Neither `rulebase_min_rule_support` nor `rulebase_max_num_rules` is set")
-
     reaction_sample_cls: type[ReactionSample]
     if config.model_class is ModelClass.SmilesTransformer:
         reaction_sample_cls = SmilesReactionSample
     else:
         reaction_sample_cls = TemplateReactionSample
+        if config.rulebase_min_rule_support is None and config.rulebase_max_num_rules is None:
+            logger.warning(
+                "Neither `rulebase_min_rule_support` nor `rulebase_max_num_rules` is set"
+            )
 
     dataset = DiskReactionDataset(
         data_dir=config.data_dir,
@@ -68,11 +69,15 @@ def main() -> None:
         rulebase_max_num_rules=config.rulebase_max_num_rules,
     )
 
-    logger.info(f"Saving the modified rulebase under {config.processed_data_dir}")
-    dataset.rulebase.save_to_file(dir=processed_data_dir)
+    if config.model_class is ModelClass.SmilesTransformer:
+        rulebase = None
+    else:
+        rulebase = dataset.rulebase
+        logger.info(f"Saving the modified rulebase under {config.processed_data_dir}")
+        rulebase.save_to_file(dir=processed_data_dir)
 
     model, _ = build_model_from_config(
-        config=config, rulebase=dataset.rulebase, rulebase_dir=processed_data_dir
+        config=config, rulebase=rulebase, rulebase_dir=processed_data_dir
     )
 
     logger.info(
