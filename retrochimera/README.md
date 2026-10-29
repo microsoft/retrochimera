@@ -46,8 +46,8 @@ This step constructs a tokenizer and generates the corresponding vocabulary file
 
 # Data featurization
 
-- Input: `{train, val, test}.jsonl` and `template_lib.json` produced by previous step
-- Output: `data.h5` file containing all featurized folds and `template_lib.json` (copied from input)
+- Input: `{train, val, test}.jsonl` and `template_lib.json` or `vocab.txt` produced by previous step
+- Output: `data.h5` file containing all featurized folds and `template_lib.json` (copied from input for template-based models)
 - Script: `./retrochimera/cli/preprocess.py`
 
 This step converts the data further into a featurized form ready for training. This is different depending on the downstream model, e.g. for graph-based model, this is when the molecules are turned into graphs. Due to this, in this step one needs to set the model class (and potentially other hyperparameters that affect data preprocessing).

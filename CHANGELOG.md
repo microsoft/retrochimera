@@ -15,6 +15,7 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - Fix regex syntax warning ([#52](https://github.com/microsoft/retrochimera/pull/52)) ([@lgeiger])
 - Parallelise R-SMILES augmentation in CLI ([#54](https://github.com/microsoft/retrochimera/pull/54)) ([@lgeiger])
 - Parallelise tokenizer build in CLI with deterministic ordering ([#56](https://github.com/microsoft/retrochimera/pull/56)) ([@lgeiger])
+- Do not require rulebase for SMILES Transformer preprocessing ([#57](https://github.com/microsoft/retrochimera/pull/57)) ([@lgeiger])
 
 ### Added
 
