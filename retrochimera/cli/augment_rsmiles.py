@@ -44,6 +44,7 @@ class AugmentRSMILESConfig:
     augmentation: int = 1  # Number of augmentations per reaction
     seed: int = 33  # Random seed for reproducibility
     use_random_smiles: bool = False  # If set, use random SMILES instead of root-aligned
+    allow_fragments: bool = False  # If set, allow `.` as part of the SMILES string
     num_processes: int = cpu_count()  # Number of parallel processes to use
     timeout: Optional[int] = None  # Timeout per reaction (in seconds) for augmentation
 
@@ -211,7 +212,6 @@ def preprocess(
                 reactants_smiles = []
                 for reactant in tgt.split("."):
                     reactants_smiles.append({"smiles": reactant})
-                assert "." not in src
                 products_smiles = [{"smiles": src}]
 
                 updated_reaction = result["reaction"]
@@ -240,15 +240,16 @@ def run_from_config(config: AugmentRSMILESConfig) -> None:
 
         logger.info(f"Fold size: {len(reaction_list)}")
 
-        product_smarts_list = list(
-            map(lambda x: x["mapped_reaction_smiles"].split(">")[2], reaction_list)
-        )
+        if not config.allow_fragments:
+            product_smarts_list = list(
+                map(lambda x: x["mapped_reaction_smiles"].split(">")[2], reaction_list)
+            )
 
-        # Prevent reactions with multiple products.
-        multiple_product_indices = [
-            i for i in range(len(product_smarts_list)) if "." in product_smarts_list[i]
-        ]
-        assert len(multiple_product_indices) == 0, "Multiple products are not supported."
+            # Prevent reactions with multiple products.
+            multiple_product_indices = [
+                i for i in range(len(product_smarts_list)) if "." in product_smarts_list[i]
+            ]
+            assert len(multiple_product_indices) == 0, "Multiple products are not supported."
 
         preprocess(
             augmented_data_dir,
