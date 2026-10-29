@@ -9,13 +9,16 @@ import json
 import os
 import random
 import re
+from concurrent.futures import TimeoutError
 from dataclasses import dataclass, field
 from typing import Optional
 
 from omegaconf import MISSING
+from pebble import ProcessPool
 from rdkit import Chem, RDLogger
 from syntheseus.reaction_prediction.data.dataset import DataFold
 from syntheseus.reaction_prediction.utils.config import get_config as cli_get_config
+from syntheseus.reaction_prediction.utils.misc import cpu_count
 from tqdm import tqdm
 
 from retrochimera.utils.logging import get_logger
@@ -41,10 +44,13 @@ class AugmentRSMILESConfig:
     augmentation: int = 1  # Number of augmentations per reaction
     seed: int = 33  # Random seed for reproducibility
     use_random_smiles: bool = False  # If set, use random SMILES instead of root-aligned
+    num_processes: int = cpu_count()  # Number of parallel processes to use
+    timeout: Optional[int] = None  # Timeout per reaction (in seconds) for augmentation
 
 
 def multi_process(data: dict):
     """Multi-process function to process the data."""
+    random.seed(data["seed"])
     reaction = data["reaction"]
     augmentation = data["augmentation"]
 
@@ -152,6 +158,9 @@ def preprocess(
     fold: DataFold,
     augmentation: int = 1,
     use_random_smiles: bool = False,
+    num_processes: int = cpu_count(),
+    seed: int = 33,
+    timeout: Optional[int] = None,
 ) -> None:
     """Preprocess reaction data to extract graph adjacency matrix and features."""
 
@@ -163,6 +172,7 @@ def preprocess(
             "reaction": reaction_list[i],
             "augmentation": augmentation,
             "use_random_smiles": use_random_smiles,
+            "seed": seed + i,
         }
         for i in range(len(reaction_list))
     ]
@@ -176,9 +186,20 @@ def preprocess(
         "error_mapping_p": 0,
         "empty_p": 0,
         "empty_r": 0,
+        "timeout": 0,
     }
 
-    results = [multi_process(sample) for sample in tqdm(data)]
+    results = []
+    with ProcessPool(max_workers=num_processes) as pool:
+        futures = [pool.schedule(multi_process, args=(sample,), timeout=timeout) for sample in data]
+        for i, future in enumerate(tqdm(futures, desc="Augmenting reactions")):
+            try:
+                results.append(future.result())
+            except TimeoutError:
+                skip_dict["timeout"] += 1
+                logger.warning(
+                    f"Augmentation timed out for sample {i}: {reaction_list[i]['mapped_reaction_smiles']}"
+                )
 
     with open(os.path.join(augmented_data_dir, f"{fold.value}.jsonl"), "w") as f:
         for result in tqdm(results):
@@ -205,8 +226,6 @@ def preprocess(
 def run_from_config(config: AugmentRSMILESConfig) -> None:
     logger.info(f"Preprocessing dataset from {config.data_dir}")
 
-    random.seed(config.seed)
-
     data_dir = config.data_dir
     augmented_data_dir = config.augmented_data_dir
 
@@ -225,8 +244,6 @@ def run_from_config(config: AugmentRSMILESConfig) -> None:
             map(lambda x: x["mapped_reaction_smiles"].split(">")[2], reaction_list)
         )
 
-        augmented_data_fold_dir = os.path.join(augmented_data_dir, fold.value)
-
         # Prevent reactions with multiple products.
         multiple_product_indices = [
             i for i in range(len(product_smarts_list)) if "." in product_smarts_list[i]
@@ -234,11 +251,14 @@ def run_from_config(config: AugmentRSMILESConfig) -> None:
         assert len(multiple_product_indices) == 0, "Multiple products are not supported."
 
         preprocess(
-            augmented_data_fold_dir,
+            augmented_data_dir,
             reaction_list,
             fold,
             config.augmentation,
             use_random_smiles=config.use_random_smiles,
+            num_processes=config.num_processes,
+            seed=config.seed,
+            timeout=config.timeout,
         )
 
 
