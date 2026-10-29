@@ -1,9 +1,10 @@
 import re
 from collections import defaultdict
 from pathlib import Path
-from typing import Optional
+from typing import Iterable, Optional
 
 from syntheseus.reaction_prediction.data.dataset import DataFold, DiskReactionDataset
+from tqdm import tqdm
 
 from retrochimera.data.smiles_reaction_sample import SmilesReactionSample
 from retrochimera.utils.logging import get_logger
@@ -104,7 +105,7 @@ class Tokenizer:
 
     @staticmethod
     def from_smiles(
-        smiles: list[str],
+        smiles: Iterable[str],
         regex: re.Pattern = REGEX,
         begin_token: str = DEFAULT_BEGIN_TOKEN,
         end_token: str = DEFAULT_END_TOKEN,
@@ -117,12 +118,11 @@ class Tokenizer:
             regex: Regex object for tokenizing
         """
         vocab = set()
-        for smi in smiles:
-            for token in regex.findall(smi):
-                vocab.add(token)
+        for smi in tqdm(smiles, desc="Building vocabulary"):
+            vocab.update(regex.findall(smi))
 
         tokenizer = Tokenizer(
-            list(vocab),
+            sorted(vocab),
             regex,
             begin_token=begin_token,
             end_token=end_token,
@@ -139,20 +139,23 @@ class Tokenizer:
         end_token: str = DEFAULT_END_TOKEN,
         pad_token: str = DEFAULT_PAD_TOKEN,
         unk_token: str = DEFAULT_UNK_TOKEN,
+        num_processes: int = 0,
     ):
         """Build the tokenizer from reaction data and a pattern.
         Args:
             reaction_data_path: Path to reaction data
             regex: Regex object for tokenizing
         """
-        reaction_dataset = DiskReactionDataset(reaction_data_path, sample_cls=SmilesReactionSample)
+        reaction_dataset = DiskReactionDataset(
+            reaction_data_path, sample_cls=SmilesReactionSample, num_processes=num_processes
+        )
         training_dataset = reaction_dataset[DataFold.TRAIN]
 
-        smiles = []
-        for sample in training_dataset:
-            smiles.append(sample.raw_reactants_smiles)
-            smiles.append(sample.raw_products_smiles)
-
+        smiles = (
+            smi
+            for sample in training_dataset
+            for smi in (sample.raw_reactants_smiles, sample.raw_products_smiles)
+        )
         tokenizer = Tokenizer.from_smiles(
             smiles,
             regex,
@@ -172,6 +175,7 @@ class Tokenizer:
             tokens_str += f"{token}\n"
 
         p = Path(vocab_path)
+        p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(tokens_str)
 
     def __len__(self) -> int:
