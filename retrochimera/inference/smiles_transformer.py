@@ -1,7 +1,8 @@
 import argparse
 import math
 from abc import abstractmethod
-from typing import Any, Generic, Sequence, TypeVar
+from contextlib import nullcontext
+from typing import Any, Generic, Literal, Sequence, TypeVar
 
 import torch
 from loky import get_reusable_executor
@@ -36,6 +37,7 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
         probability_from_score_temperature: float = 3.0,
         filter_duplicate_augmentations: bool = True,
         canonicalization_processes: int = min(16, max(1, cpu_count() // 2)),
+        inference_precision: Literal["float32", "float16", "bfloat16"] = "float32",
         **kwargs,
     ) -> None:
         """Initializes the SmilesTransformer model wrapper.
@@ -53,6 +55,10 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
             raise ValueError(
                 "Class based on `AbstractSmilesTransformerModel` should extended `ReactionModel`"
             )
+
+        if inference_precision not in {"float32", "float16", "bfloat16"}:
+            raise ValueError(f"Unsupported inference_precision {inference_precision}")
+        self._autocast_dtype = getattr(torch, inference_precision)
 
         if canonicalization_processes <= 0:
             raise ValueError("canonicalization_processes must be positive")
@@ -85,6 +91,12 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
         logger.info(f"Maximum generated sequence length: {self.max_generated_seq_len}")
         logger.info(f"Filter duplicate augmentations: {self.filter_duplicate_augmentations}")
         logger.info(f"Canonicalization processes: {self._canonicalization_processes}")
+        logger.info(f"Inference precision: {inference_precision}")
+
+    def _autocast_context(self):
+        if self._autocast_dtype == torch.float32 or not self.device.startswith("cuda"):
+            return nullcontext()
+        return torch.autocast(device_type="cuda", dtype=self._autocast_dtype)
 
     def get_parameters(self):
         return self.model.parameters()
@@ -195,7 +207,8 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
         batch["src"] = src  # tuple[Tensor, Tensor]: (padded_src_len, batch_size, 1), (batch_size,)
         batch["batch_size"] = batch_size
 
-        translate_results = translator.translate_batch(batch, attn_debug=False)
+        with self._autocast_context():
+            translate_results = translator.translate_batch(batch, attn_debug=False)
         augmented_batch_output_token_ids = translate_results[
             "predictions"
         ]  # list[list[LongTensor]]: For each batch, holds a list of beam prediction sequences
@@ -276,7 +289,7 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
         self, reaction_smiles: list[str], minibatch_size: int = 32
     ) -> tuple[list[float], list[float]]:
         """Compute total and average probabilities for a list of reaction SMILES strings."""
-        with torch.inference_mode():
+        with torch.inference_mode(), self._autocast_context():
             return self.model.compute_probs(reaction_smiles, minibatch_size=minibatch_size)
 
 
