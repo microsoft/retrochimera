@@ -75,7 +75,7 @@ def test_workflow_end_to_end(
 
         # Check that the training has worked.
         assert len(results.test_results) > 0
-        assert results.test_results[0]["test_acc"] > 0.75
+        assert results.test_results[0]["test_template_acc"] > 0.75
 
         # Build the wrapper, and exit the context (the temporary dir will not be needed unless the
         # rule application processes need to be restarted which shouldn't happen here).

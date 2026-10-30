@@ -49,6 +49,23 @@ class DiskReactionDataset(dataset_syntheseus.DiskReactionDataset[SampleType], Re
         return self._rulebase
 
 
+class SingleProductReactionDataset(dataset_syntheseus.DiskReactionDataset[SampleType]):
+    """Exclude multi-product reactions from validation and test folds only."""
+
+    def __getitem__(self, fold: DataFold) -> Iterable[SampleType]:
+        samples = super().__getitem__(fold)
+        if fold == DataFold.TRAIN:
+            return samples
+        return (sample for sample in samples if len(sample.products) == 1)
+
+    def get_num_samples(self, fold: DataFold) -> int:
+        if fold == DataFold.TRAIN:
+            return super().get_num_samples(fold)
+        if fold not in self._num_samples:
+            self._num_samples[fold] = sum(1 for _ in self[fold])
+        return self._num_samples[fold]
+
+
 class InMemoryReactionDataset(ReactionDataset[SampleType]):
     def __init__(
         self, samples: dict[DataFold, list[SampleType]], rulebase: Optional[RuleBase] = None

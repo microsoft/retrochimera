@@ -3,7 +3,7 @@
 Here it is modified to process predictions given as a tuple of (SMILES, probability).
 """
 
-from rdkit import Chem
+from rdkit import Chem, rdBase
 
 
 def canonicalize_smiles_clear_map(prediction, return_max_frag=True):
@@ -18,7 +18,8 @@ def canonicalize_smiles_clear_map(prediction, return_max_frag=True):
         maximum connected fragment together with the probability.
     """
     smiles, probability = prediction
-    mol = Chem.MolFromSmiles(smiles, sanitize=True)
+    with rdBase.BlockLogs():
+        mol = Chem.MolFromSmiles(smiles, sanitize=True)
     if mol is not None:
         [
             atom.ClearProp("molAtomMapNumber")

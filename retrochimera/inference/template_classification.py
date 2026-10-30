@@ -1,32 +1,34 @@
-from typing import Any, Sequence
+from typing import Any, Optional, Sequence
 
 from syntheseus import Molecule, SingleProductReaction
 from syntheseus.reaction_prediction.inference_base import ExternalBackwardReactionModel
 from syntheseus.reaction_prediction.utils.inference import get_unique_file_in_dir
 
 from retrochimera.chem.rules import RuleBasedRetrosynthesizer, RulePrediction
+from retrochimera.models.template_classification import MCCModel
 
 
 class TemplateClassificationModel(RuleBasedRetrosynthesizer, ExternalBackwardReactionModel):
     """Wrapper for a model performing template classification backed by a given molecule encoder."""
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, *args, model: Optional[MCCModel] = None, **kwargs) -> None:
         """Initializes the TemplateClassification model wrapper.
 
         Assumed format of the model directory:
         - `model_dir` contains the model checkpoint as the only `*.ckpt` file
+
+        Pass `model` to wrap a live training model instead of loading a checkpoint from `model_dir`.
         """
-
-        from retrochimera.models.template_classification import MCCModel
-
         super().__init__(*args, **kwargs)
         self.start_server(rulebase_dir=self.model_dir)
 
-        self.model = MCCModel.load_from_checkpoint(
-            get_unique_file_in_dir(self.model_dir, pattern="*.ckpt")
-        )
-        self.model.to(self.device)
-        self.model.eval()
+        if model is None:
+            model = MCCModel.load_from_checkpoint(
+                get_unique_file_in_dir(self.model_dir, pattern="*.ckpt")
+            )
+            model.to(self.device)
+            model.eval()
+        self.model = model
 
     def get_model_info(self) -> dict[str, Any]:
         return self.model.hparams
