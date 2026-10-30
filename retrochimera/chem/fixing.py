@@ -135,8 +135,6 @@ def fix_mol(mol: Chem.Mol) -> Optional[str]:
         mol = cp
         return Chem.MolToSmiles(mol)
     except ValueError:
-        logger.debug(f"fix_mol: {Chem.MolToSmiles(mol)}")
-
         mol_adjusted = adjust_aromatic_Ns(mol)
         if mol_adjusted is None:
             return None
