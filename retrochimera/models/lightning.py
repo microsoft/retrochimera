@@ -3,9 +3,10 @@ from typing import Callable, Generic, Iterable, TypeVar
 
 import pytorch_lightning as pl
 import torch
-import torchmetrics
-from pytorch_lightning.utilities import grad_norm
+from syntheseus.interface.models import BackwardReactionModel
 from torch.nn import functional as f
+from torchmetrics.functional import accuracy
+from torchmetrics.functional.retrieval import retrieval_reciprocal_rank
 
 from retrochimera.utils.logging import get_logger
 
@@ -41,8 +42,8 @@ class AbstractLightningModel(pl.LightningModule, metaclass=ABCMeta):
 
     def log(self, name, value, *args, **kwargs) -> None:
         if name.startswith("val_") or name.startswith("test_"):
-            # Sync validation and test metrics across devices.
-            kwargs["sync_dist"] = True
+            # Sync validation and test metrics across devices unless already reduced.
+            kwargs.setdefault("sync_dist", True)
 
         super().log(name, value.to(self.device), *args, **kwargs)
 
@@ -71,8 +72,13 @@ class AbstractLightningModel(pl.LightningModule, metaclass=ABCMeta):
 
         super().setup(*args, **kwargs)
 
-    def on_before_optimizer_step(self, optimizer):
-        self.log_dict(grad_norm(self, norm_type=2))
+    @property
+    def should_log_training_metrics(self) -> bool:
+        """Sample metrics at the logger's optimizer-step interval."""
+        interval = self.trainer.log_every_n_steps
+        return (
+            bool(self.trainer.loggers) and interval > 0 and (self.global_step + 1) % interval == 0
+        )
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(
@@ -98,6 +104,11 @@ class AbstractModel(
     ) -> Iterable[ProcessedSampleType]:
         pass
 
+    @abstractmethod
+    def build_inference_model(self, num_processes: int) -> BackwardReactionModel:
+        """Wrap this live model in its inference class, for evaluation during training."""
+        pass
+
     def get_nontransferable_param_prefixes(self) -> list[str]:
         """Get prefixes for parameters that should not be transferred during fine-tuning.
 
@@ -117,27 +128,28 @@ def log_classification_metrics(
     batch_targets: torch.Tensor,
     batch_size: int,
 ) -> None:
+    num_classes = batch_preds.shape[-1]
     log_fn(
         f"{step_name}_acc",
-        torchmetrics.functional.accuracy(preds=batch_preds, target=batch_targets),
+        accuracy(batch_preds, batch_targets, task="multiclass", num_classes=num_classes),
         batch_size=batch_size,
     )
 
-    for k in [5, 10, 50]:
+    for k in [1, 3, 5, 10, 50]:
         if k < batch_preds.shape[-1]:
             log_fn(
                 f"{step_name}_top_{k}_acc",
-                torchmetrics.functional.accuracy(preds=batch_preds, target=batch_targets, top_k=k),
+                accuracy(
+                    batch_preds, batch_targets, top_k=k, task="multiclass", num_classes=num_classes
+                ),
                 batch_size=batch_size,
             )
 
     if step_name != "train":
-        num_classes = batch_preds.shape[-1]
-
         # The `retrieval_reciprocal_rank` function is unbatched and somewhat slow. We call it on
         # each sample separately, but only during validation/testing.
         reciprocal_ranks = [
-            torchmetrics.functional.retrieval_reciprocal_rank(preds=preds, target=target)
+            retrieval_reciprocal_rank(preds=preds, target=target)
             for preds, target in zip(batch_preds, f.one_hot(batch_targets, num_classes=num_classes))
         ]
         log_fn(

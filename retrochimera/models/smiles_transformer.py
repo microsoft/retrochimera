@@ -4,6 +4,7 @@ from typing import Iterable, Optional
 
 import torch
 from more_itertools import batched
+from syntheseus.interface.models import BackwardReactionModel
 from torch import nn
 from torch.nn.init import xavier_uniform_, zeros_
 from torch.optim.lr_scheduler import OneCycleLR
@@ -217,6 +218,9 @@ class SmilesTransformerModel(AbstractModel[SmilesReactionSample, ProcessedSample
 
         model_output = self.forward(batch)
         loss = self.calculate_loss(batch, model_output)
+        if step_name == "train" and not self.should_log_training_metrics:
+            return loss
+
         with torch.no_grad():
             token_acc = self.calculate_token_accuracy(batch, model_output)
             perplexity = self.calculate_perplexity(batch, model_output)
@@ -225,7 +229,6 @@ class SmilesTransformerModel(AbstractModel[SmilesReactionSample, ProcessedSample
             f"{step_name}_loss",
             loss,
             prog_bar=True,
-            on_step=True,
             sync_dist=True,
             batch_size=batch_size,
         )
@@ -233,7 +236,6 @@ class SmilesTransformerModel(AbstractModel[SmilesReactionSample, ProcessedSample
             f"{step_name}_token_acc",
             token_acc,
             prog_bar=True,
-            on_step=True,
             sync_dist=True,
             batch_size=batch_size,
         )
@@ -241,12 +243,19 @@ class SmilesTransformerModel(AbstractModel[SmilesReactionSample, ProcessedSample
             f"{step_name}_perplexity",
             perplexity,
             prog_bar=True,
-            on_step=True,
             sync_dist=True,
             batch_size=batch_size,
         )
 
         return loss
+
+    def build_inference_model(self, num_processes: int) -> BackwardReactionModel:
+        from retrochimera.inference.smiles_transformer import LiveSmilesTransformerModel
+
+        return LiveSmilesTransformerModel(
+            model=self,
+            canonicalization_processes=num_processes,
+        )
 
     def construct_input(
         self, token_ids: torch.Tensor, step: Optional[int] = None, is_encoder: bool = True
