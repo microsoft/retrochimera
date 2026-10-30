@@ -1,3 +1,4 @@
+from time import perf_counter
 from typing import Any
 
 import pytorch_lightning as pl
@@ -20,6 +21,25 @@ class OptLRMonitor(Callback):
         # Only support one param group
         stats = {"lr-Adam": opt.param_groups[0]["lr"]}
         trainer.logger.log_metrics(stats, step=trainer.global_step)
+
+
+class EpochTimeMonitor(Callback):
+    """Log approximate epoch wall time, including validation, on rank zero."""
+
+    def on_train_epoch_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+        self._epoch_start_time = perf_counter()
+
+    def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+        if not trainer.is_global_zero:
+            return
+
+        elapsed = perf_counter() - self._epoch_start_time
+        logger.info("Epoch %d completed in %.1f seconds", trainer.current_epoch, elapsed)
+        if trainer.logger is not None:
+            trainer.logger.log_metrics(
+                {"train_epoch_time_seconds": elapsed, "epoch": trainer.current_epoch},
+                step=trainer.global_step,
+            )
 
 
 class ModelCheckpoint(pl_callbacks.ModelCheckpoint):

@@ -32,7 +32,7 @@ from retrochimera.models.template_localization import TemplateLocalizationModel
 from retrochimera.utils.logging import get_logger
 from retrochimera.utils.misc import convert_camel_to_snake, lookup_by_name
 from retrochimera.utils.pytorch import Float32MatmulPrecision
-from retrochimera.utils.pytorch_lightning import ModelCheckpoint, OptLRMonitor, UnfreezeCallback
+from retrochimera.utils.pytorch_lightning import EpochTimeMonitor, ModelCheckpoint, OptLRMonitor, UnfreezeCallback
 from retrochimera.utils.training import (
     average_checkpoints,
     freeze_pretrained_layers,
@@ -204,6 +204,7 @@ class TrainConfig(ModelTrainingConfig):
     log_dir: str = "."  # Directory to store logs
     seed: int = 0  # Seed to use for all sources of randomness (Python, numpy, torch)
     float32_matmul_precision: Float32MatmulPrecision = Float32MatmulPrecision.highest
+    precision: str = "32-true"  # Precision to use for training.
 
     num_processes_training: int = 1  # Number of processes to use for training
 
@@ -236,6 +237,9 @@ def train(
     # Add a timeout if we are using data loading worker processes
     if data_loader_kwargs["num_workers"]:
         data_loader_kwargs["timeout"] = 600
+        if sys.platform == "linux":
+            # Match the Python <3.14 behavior without pickling the bound model collator.
+            data_loader_kwargs["multiprocessing_context"] = "fork"
 
     datamodule = ProcessedDataModule(h5_path=data_path, data_loader_kwargs=data_loader_kwargs)
 
@@ -269,7 +273,7 @@ def train(
         )
         lr_monitor_callback = OptLRMonitor()
 
-        callbacks = [best_checkpoint_callback, last_checkpoint_callback, lr_monitor_callback]
+        callbacks = [best_checkpoint_callback, last_checkpoint_callback, lr_monitor_callback, EpochTimeMonitor()]
     else:
         best_checkpoint_callback = ModelCheckpoint(
             dirpath=config.checkpoint_dir,
@@ -305,10 +309,15 @@ def train(
     else:
         strategy_kwargs = {}
 
+    if model_config.training.n_devices > 1 and not isinstance(model, SmilesTransformerModel):
+        strategy = pl.strategies.DDPStrategy(
+            timeout=datetime.timedelta(seconds=2*60*60), **strategy_kwargs
+        )  # Increase timeout to give nodes enough time to load the rulebase
+    else:
+        strategy = "auto"
+
     trainer = pl.Trainer(
-        strategy=pl.strategies.DDPStrategy(
-            timeout=datetime.timedelta(seconds=36000), **strategy_kwargs
-        ),  # Increase timeout to give nodes enough time to load the rulebase
+        strategy=strategy,
         enable_checkpointing=True,
         max_epochs=model_config.training.n_epochs,
         check_val_every_n_epoch=model_config.training.check_val_every_n_epoch,
@@ -319,6 +328,7 @@ def train(
         gradient_clip_val=model_config.training.gradient_clip_val,
         accumulate_grad_batches=model_config.training.accumulate_grad_batches,
         num_sanity_val_steps=0,
+        precision=config.precision,
     )
 
     best_checkpoint_path = checkpoint_dir / "combined.ckpt"

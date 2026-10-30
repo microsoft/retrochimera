@@ -3,7 +3,7 @@ from typing import Callable, Generic, Iterable, TypeVar
 
 import pytorch_lightning as pl
 import torch
-import torchmetrics
+from torchmetrics.functional import accuracy, retrieval_reciprocal_rank
 from pytorch_lightning.utilities import grad_norm
 from torch.nn import functional as f
 
@@ -117,9 +117,10 @@ def log_classification_metrics(
     batch_targets: torch.Tensor,
     batch_size: int,
 ) -> None:
+    num_classes = batch_preds.shape[-1]
     log_fn(
         f"{step_name}_acc",
-        torchmetrics.functional.accuracy(preds=batch_preds, target=batch_targets),
+        accuracy(batch_preds, batch_targets, task="multiclass", num_classes=num_classes),
         batch_size=batch_size,
     )
 
@@ -127,17 +128,15 @@ def log_classification_metrics(
         if k < batch_preds.shape[-1]:
             log_fn(
                 f"{step_name}_top_{k}_acc",
-                torchmetrics.functional.accuracy(preds=batch_preds, target=batch_targets, top_k=k),
+                accuracy(batch_preds, batch_targets, top_k=k, task="multiclass", num_classes=num_classes),
                 batch_size=batch_size,
             )
 
     if step_name != "train":
-        num_classes = batch_preds.shape[-1]
-
         # The `retrieval_reciprocal_rank` function is unbatched and somewhat slow. We call it on
         # each sample separately, but only during validation/testing.
         reciprocal_ranks = [
-            torchmetrics.functional.retrieval_reciprocal_rank(preds=preds, target=target)
+            retrieval_reciprocal_rank(preds=preds, target=target)
             for preds, target in zip(batch_preds, f.one_hot(batch_targets, num_classes=num_classes))
         ]
         log_fn(
