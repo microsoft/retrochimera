@@ -69,7 +69,7 @@ def load_from_h5py(entry: Union[h5py.Dataset, h5py.Group]) -> Any:
     elif cls in (int, bool):
         return np.asarray(entry).item()
     elif cls is list:
-        return list(entry)
+        return np.asarray(entry).tolist()
     else:
         assert isinstance(entry, h5py.Dataset)
         return np.asarray(entry)

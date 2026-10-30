@@ -217,6 +217,9 @@ class SmilesTransformerModel(AbstractModel[SmilesReactionSample, ProcessedSample
 
         model_output = self.forward(batch)
         loss = self.calculate_loss(batch, model_output)
+        if step_name == "train" and not self.should_log_training_metrics:
+            return loss
+
         with torch.no_grad():
             token_acc = self.calculate_token_accuracy(batch, model_output)
             perplexity = self.calculate_perplexity(batch, model_output)

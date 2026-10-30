@@ -1,5 +1,7 @@
 model_class: SmilesTransformer
 num_processes_training: 4
+float32_matmul_precision: high
+precision: bf16-mixed
 smiles_transformer_config:
   n_layers: 8
   hidden_dim: 512

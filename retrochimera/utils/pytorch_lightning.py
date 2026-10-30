@@ -9,19 +9,6 @@ from retrochimera.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-class OptLRMonitor(Callback):
-    def __init__(self):
-        super().__init__()
-
-    def on_train_batch_start(self, trainer, *args, **kwargs):
-        # Only support one optimizer
-        opt = trainer.optimizers[0]
-
-        # Only support one param group
-        stats = {"lr-Adam": opt.param_groups[0]["lr"]}
-        trainer.logger.log_metrics(stats, step=trainer.global_step)
-
-
 class ModelCheckpoint(pl_callbacks.ModelCheckpoint):
     """Custom `ModelCheckpoint` callback which fixes checkpoint paths upon directory change.
 

@@ -431,6 +431,8 @@ class TemplateLocalizationModel(AbstractModel[TemplateReactionSample, ProcessedS
 
         localization_loss /= batch_size * (self.num_negative_rewrites_in_localization + 1)
         loss = classification_loss + localization_loss
+        if step_name == "train" and not self.should_log_training_metrics:
+            return loss
 
         if step_name == "train":
             if self.classification_loss_type == "sigmoid":
