@@ -1,5 +1,6 @@
 import argparse
 import math
+import operator
 from abc import abstractmethod
 from contextlib import nullcontext
 from typing import Any, Generic, Literal, Sequence, TypeVar
@@ -37,6 +38,7 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
         probability_from_score_temperature: float = 3.0,
         filter_duplicate_augmentations: bool = True,
         canonicalization_processes: int = min(16, max(1, cpu_count() // 2)),
+        canonicalization_chunksize: int = 8,
         inference_precision: Literal["float32", "float16", "bfloat16"] = "float32",
         **kwargs,
     ) -> None:
@@ -63,6 +65,15 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
         if canonicalization_processes <= 0:
             raise ValueError("canonicalization_processes must be positive")
         self._canonicalization_processes = canonicalization_processes
+        if isinstance(canonicalization_chunksize, bool):
+            raise ValueError("canonicalization_chunksize must be a positive integer")
+        try:
+            canonicalization_chunksize = operator.index(canonicalization_chunksize)
+        except TypeError as error:
+            raise ValueError("canonicalization_chunksize must be a positive integer") from error
+        if canonicalization_chunksize < 1:
+            raise ValueError("canonicalization_chunksize must be a positive integer")
+        self._canonicalization_chunksize = canonicalization_chunksize
 
         # There should be exaclty one `*.ckpt` file under `model_dir`.
         chkpt_path = get_unique_file_in_dir(self.model_dir, pattern="*.ckpt")
@@ -91,7 +102,22 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
         logger.info(f"Maximum generated sequence length: {self.max_generated_seq_len}")
         logger.info(f"Filter duplicate augmentations: {self.filter_duplicate_augmentations}")
         logger.info(f"Canonicalization processes: {self._canonicalization_processes}")
+        logger.info(f"Canonicalization chunksize: {self._canonicalization_chunksize}")
         logger.info(f"Inference precision: {inference_precision}")
+
+    def _canonicalize_predictions(
+        self, lines: list[tuple[str, float]]
+    ) -> list[tuple[str, str, float]]:
+        from retrochimera.utils.root_aligned_score import canonicalize_smiles_clear_map
+
+        # Keep workers reusable across batches; Loky retires them after five idle minutes
+        # and restarts them on demand, so do not shut down the shared executor here.
+        executor = get_reusable_executor(max_workers=self._canonicalization_processes, timeout=300)
+        return list(
+            executor.map(
+                canonicalize_smiles_clear_map, lines, chunksize=self._canonicalization_chunksize
+            )
+        )
 
     def _autocast_context(self):
         if self._autocast_dtype == torch.float32 or not self.device.startswith("cuda"):
@@ -156,10 +182,7 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
     def _get_reactions(
         self, inputs: list[InputType], num_results: int
     ) -> list[Sequence[ReactionType]]:
-        from retrochimera.utils.root_aligned_score import (
-            canonicalize_smiles_clear_map,
-            compute_rank,
-        )
+        from retrochimera.utils.root_aligned_score import compute_rank
 
         # Step 1: Perform data augmentation on the input side (and convert to SMILES along the way).
         augmented_inputs: list[str] = []
@@ -230,12 +253,8 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
                 assert isinstance(line[0], str)
                 lines.append((line[0], augmented_batch_scores[i][j]))
 
-        # Keep workers reusable across batches; Loky retires them after five idle minutes
-        # and restarts them on demand, so do not shut down the shared executor here.
-        executor = get_reusable_executor(max_workers=self._canonicalization_processes, timeout=300)
-        raw_predictions = list(
-            executor.map(canonicalize_smiles_clear_map, lines)
-        )  # canonicalize reactants and modify illegal reactants into empty strings
+        # Canonicalize reactants and modify illegal reactants into empty strings.
+        raw_predictions = self._canonicalize_predictions(lines)
 
         predictions = []
         left_index = 0
