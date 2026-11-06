@@ -44,6 +44,7 @@ class AugmentRSMILESConfig:
     augmentation: int = 1  # Number of augmentations per reaction
     seed: int = 33  # Random seed for reproducibility
     use_random_smiles: bool = False  # If set, use random SMILES instead of root-aligned
+    keep_all_reactants: bool = False  # Retain reactants without surviving product atom maps
     allow_fragments: bool = False  # If set, allow `.` as part of the SMILES string
     num_processes: int = cpu_count()  # Number of parallel processes to use
     timeout: Optional[int] = None  # Timeout per reaction (in seconds) for augmentation
@@ -54,6 +55,7 @@ def multi_process(data: dict):
     random.seed(data["seed"])
     reaction = data["reaction"]
     augmentation = data["augmentation"]
+    keep_all_reactants = data["keep_all_reactants"]
 
     reactant, _, product = reaction["mapped_reaction_smiles"].split(">")
     pro_mol = Chem.MolFromSmiles(product)
@@ -83,7 +85,11 @@ def multi_process(data: dict):
         return_status["status"] = "error_mapping_p"
 
     if return_status["status"] == 0:
-        pro_atom_map_numbers = list(map(int, re.findall(r"(?<=:)\d+", product)))
+        if keep_all_reactants:
+            # Ordinary H atoms may have been removed while parsing the mapped product.
+            pro_atom_map_numbers = [atom.GetAtomMapNum() for atom in pro_mol.GetAtoms()]
+        else:
+            pro_atom_map_numbers = list(map(int, re.findall(r"(?<=:)\d+", product)))
         reactant = reactant.split(".")
         if not data["use_random_smiles"]:
             product_roots = get_product_roots(
@@ -121,6 +127,14 @@ def multi_process(data: dict):
                     list(zip(aligned_reactants, aligned_reactants_order)), key=lambda x: x[1]
                 )
                 aligned_reactants = [item[0] for item in sorted_reactants]
+                if keep_all_reactants:
+                    aligned_reactants.extend(
+                        sorted(
+                            clear_map_canonical_smiles(rea)
+                            for i, rea in enumerate(reactant)
+                            if i not in used_indices
+                        )
+                    )
                 reactant_smi = ".".join(aligned_reactants)
 
                 # Save the resulted smiles.
@@ -130,13 +144,14 @@ def multi_process(data: dict):
             assert len(return_status["src_smi"]) == data["augmentation"]
         else:
             cano_product = clear_map_canonical_smiles(product)
-            cano_reactanct = ".".join(
-                [
-                    clear_map_canonical_smiles(rea)
-                    for rea in reactant
-                    if set(map(int, re.findall(r"(?<=:)\d+", rea))) & set(pro_atom_map_numbers)
-                ]
-            )
+            cano_reactants = []
+            unmatched_reactants = []
+            for rea in reactant:
+                if set(pro_atom_map_numbers) & set(map(int, re.findall(r"(?<=:)\d+", rea))):
+                    cano_reactants.append(clear_map_canonical_smiles(rea))
+                elif keep_all_reactants:
+                    unmatched_reactants.append(clear_map_canonical_smiles(rea))
+            cano_reactanct = ".".join(cano_reactants + sorted(unmatched_reactants))
             return_status["src_smi"].append(cano_product)
             return_status["tgt_smi"].append(cano_reactanct)
 
@@ -162,6 +177,7 @@ def preprocess(
     num_processes: int = cpu_count(),
     seed: int = 33,
     timeout: Optional[int] = None,
+    keep_all_reactants: bool = False,
 ) -> None:
     """Preprocess reaction data to extract graph adjacency matrix and features."""
 
@@ -173,6 +189,7 @@ def preprocess(
             "reaction": reaction_list[i],
             "augmentation": augmentation,
             "use_random_smiles": use_random_smiles,
+            "keep_all_reactants": keep_all_reactants,
             "seed": seed + i,
         }
         for i in range(len(reaction_list))
@@ -260,6 +277,7 @@ def run_from_config(config: AugmentRSMILESConfig) -> None:
             num_processes=config.num_processes,
             seed=config.seed,
             timeout=config.timeout,
+            keep_all_reactants=config.keep_all_reactants,
         )
 
 
