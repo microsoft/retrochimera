@@ -55,7 +55,7 @@ def multi_process(data: dict):
     random.seed(data["seed"])
     reaction = data["reaction"]
     augmentation = data["augmentation"]
-    keep_all_reactants = data.get("keep_all_reactants", False)
+    keep_all_reactants = data["keep_all_reactants"]
 
     reactant, _, product = reaction["mapped_reaction_smiles"].split(">")
     pro_mol = Chem.MolFromSmiles(product)

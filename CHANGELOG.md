@@ -22,6 +22,7 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 - Add configurable SMILES Transformer inference precision ([#42](https://github.com/microsoft/retrochimera/pull/42)) ([@gabrieldernbach])
 - Add option to allow multi-fragment products during augmentation ([#58](https://github.com/microsoft/retrochimera/pull/58)) ([@lgeiger])
+- Add opt-in `keep_all_reactants` flag to retain all reactant components during training-data augmentation ([#62](https://github.com/microsoft/retrochimera/pull/62)) ([@jla-gardner])
 
 ## [1.3.0] - 2026-09-21
 
@@ -84,3 +85,4 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 [@kmaziarz]: https://github.com/kmaziarz
 [@lgeiger]: https://github.com/lgeiger
 [@gabrieldernbach]: https://github.com/gabrieldernbach
+[@jla-gardner]: https://github.com/jla-gardner

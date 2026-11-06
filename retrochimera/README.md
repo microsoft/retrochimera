@@ -36,12 +36,6 @@ Note that template extraction is currently done with standard rdchiral. We have 
 
 This step augments the original dataset (in JSONL format, containing mapped reaction SMILES information) by using R-SMILES to align and augment the original smiles of products and reactants. This augmentation aims to improve the performance of the RetroChimera De-Novo model.
 
-Set `keep_all_reactants: true` in the augmentation config to retain every input reactant component,
-including H2, hydride donors, counterions, and repeated molecules. Root-aligned reactants keep their
-existing ordering; components without surviving product atom maps are appended in canonical SMILES
-sort order. This option also samples product roots from the parsed molecule, excluding ordinary H atoms
-removed by RDKit. It applies to random-SMILES augmentation as well and is disabled by default.
-
 # Tokenizer construction for De-Novo Model
 
 - Input: `{train, val, test}.jsonl` files with augmented datapoints using R-SMILES algorithm

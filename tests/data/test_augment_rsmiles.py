@@ -37,6 +37,7 @@ def sample(reactants: str, product: str, **kwargs) -> dict:
         "reaction": {"mapped_reaction_smiles": f"{reactants}>>{product}"},
         "augmentation": 3,
         "use_random_smiles": False,
+        "keep_all_reactants": False,
         "seed": 0,
         **kwargs,
     }
