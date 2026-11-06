@@ -147,7 +147,7 @@ def multi_process(data: dict):
             cano_reactants = []
             unmatched_reactants = []
             for rea in reactant:
-                if set(map(int, re.findall(r"(?<=:)\d+", rea))) & set(pro_atom_map_numbers):
+                if set(pro_atom_map_numbers) & set(map(int, re.findall(r"(?<=:)\d+", rea))):
                     cano_reactants.append(clear_map_canonical_smiles(rea))
                 elif keep_all_reactants:
                     unmatched_reactants.append(clear_map_canonical_smiles(rea))
