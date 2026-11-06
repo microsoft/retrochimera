@@ -9,6 +9,7 @@ from syntheseus.reaction_prediction.data.dataset import DataFold
 
 from retrochimera.cli.augment_rsmiles import AugmentRSMILESConfig, multi_process, run_from_config
 
+# fmt: off
 REACTIONS = [
     (
         "[CH2:1]=[CH:2][c:3]1[cH:4][cH:5][cH:6][cH:7][cH:8]1.[H:9][H:10]",
@@ -16,12 +17,12 @@ REACTIONS = [
         "[CH3:1][CH2:2][c:3]1[cH:4][cH:5][cH:6][cH:7][cH:8]1",
     ),
     (
-        "[CH3:1][C:2](=[O:3])[c:4]1[cH:5][cH:6][cH:7][cH:8][cH:9]1"
-        ".[Na+:10].[B-:11]([H:12])([H:13])([H:14])[H:15]",
+        "[CH3:1][C:2](=[O:3])[c:4]1[cH:5][cH:6][cH:7][cH:8][cH:9]1.[Na+:10].[B-:11]([H:12])([H:13])([H:14])[H:15]",
         "[CH3:1][C:2]([H:12])([O:3][H:16])[c:4]1[cH:5][cH:6][cH:7][cH:8][cH:9]1",
         "[CH3:1][CH:2]([OH:3])[c:4]1[cH:5][cH:6][cH:7][cH:8][cH:9]1",
     ),
 ]
+# fmt: on
 
 
 def components(smiles: str) -> Counter[str]:
@@ -84,11 +85,14 @@ def test_keep_all_reactants_ignores_removed_product_h_roots(
 
 @pytest.mark.parametrize("use_random_smiles", [False, True])
 def test_keep_all_reactants_preserves_duplicates(use_random_smiles: bool) -> None:
+    # fmt: off
     reactants = "[CH3:1][CH2:2][OH:3].CCO.CCO.[Na+]"
+    product = "[CH3:1][CH2:2][OH:3]"
+    # fmt: on
     result = multi_process(
         sample(
             reactants,
-            "[CH3:1][CH2:2][OH:3]",
+            product,
             use_random_smiles=use_random_smiles,
             keep_all_reactants=True,
         )
@@ -99,9 +103,35 @@ def test_keep_all_reactants_preserves_duplicates(use_random_smiles: bool) -> Non
         assert components(target) == components(reactants)
 
 
+@pytest.mark.parametrize("use_random_smiles", [False, True])
+def test_keep_all_reactants_sorts_previously_dropped_components(use_random_smiles: bool) -> None:
+    # fmt: off
+    reactants = "[Na+].[BH4-].OCC.[CH3:1][CH2:2][OH:3].[H][H].CCO"
+    product = "[CH3:1][CH2:2][OH:3]"
+    # fmt: on
+    result = multi_process(
+        sample(
+            reactants,
+            product,
+            use_random_smiles=use_random_smiles,
+            keep_all_reactants=True,
+        )
+    )
+    assert result["status"] == 0
+    assert len(result["tgt_smi"]) == 3
+    for target in result["tgt_smi"]:
+        ordered_components = [
+            Chem.MolToSmiles(Chem.MolFromSmiles(smiles)) for smiles in target.split(".")
+        ]
+        assert ordered_components == ["CCO", "CCO", "CCO", "[BH4-]", "[H][H]", "[Na+]"]
+    assert result["tgt_smi"][0] == "CCO.CCO.CCO.[BH4-].[H][H].[Na+]"
+
+
 def test_keep_all_reactants_preserves_existing_alignment() -> None:
+    # fmt: off
     reactants = "Br[CH2:1][c:2]1[cH:3][cH:4][cH:5][cH:6][cH:7]1.[OH:8][CH3:9]"
     product = "[CH2:1]([c:2]1[cH:3][cH:4][cH:5][cH:6][cH:7]1)[O:8][CH3:9]"
+    # fmt: on
     legacy = multi_process(sample(reactants, product))
     enabled = multi_process(sample(reactants, product, keep_all_reactants=True))
     assert legacy["status"] == 0

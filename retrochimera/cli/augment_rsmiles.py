@@ -129,9 +129,11 @@ def multi_process(data: dict):
                 aligned_reactants = [item[0] for item in sorted_reactants]
                 if keep_all_reactants:
                     aligned_reactants.extend(
-                        clear_map_canonical_smiles(rea)
-                        for i, rea in enumerate(reactant)
-                        if i not in used_indices
+                        sorted(
+                            clear_map_canonical_smiles(rea)
+                            for i, rea in enumerate(reactant)
+                            if i not in used_indices
+                        )
                     )
                 reactant_smi = ".".join(aligned_reactants)
 
@@ -142,14 +144,14 @@ def multi_process(data: dict):
             assert len(return_status["src_smi"]) == data["augmentation"]
         else:
             cano_product = clear_map_canonical_smiles(product)
-            cano_reactanct = ".".join(
-                [
-                    clear_map_canonical_smiles(rea)
-                    for rea in reactant
-                    if keep_all_reactants
-                    or set(map(int, re.findall(r"(?<=:)\d+", rea))) & set(pro_atom_map_numbers)
-                ]
-            )
+            cano_reactants = []
+            unmatched_reactants = []
+            for rea in reactant:
+                if set(map(int, re.findall(r"(?<=:)\d+", rea))) & set(pro_atom_map_numbers):
+                    cano_reactants.append(clear_map_canonical_smiles(rea))
+                elif keep_all_reactants:
+                    unmatched_reactants.append(clear_map_canonical_smiles(rea))
+            cano_reactanct = ".".join(cano_reactants + sorted(unmatched_reactants))
             return_status["src_smi"].append(cano_product)
             return_status["tgt_smi"].append(cano_reactanct)
 
