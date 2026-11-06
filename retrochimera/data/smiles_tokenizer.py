@@ -277,6 +277,7 @@ class Tokenizer:
 
     def print_unknown_tokens(self) -> None:
         """Used when training on a new dataset."""
-        logger.info(f"{'Token':<10}Count")
+        if self.met_unk_tokens_dict:
+            logger.info(f"{'Token':<10}Count")
         for token, count in self.met_unk_tokens_dict.items():
             logger.info(f"{token:<10}{count}")
