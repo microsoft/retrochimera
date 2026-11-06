@@ -134,7 +134,7 @@ def log_classification_metrics(
         batch_size=batch_size,
     )
 
-    for k in [5, 10, 50]:
+    for k in [1, 3, 5, 10, 50]:
         if k < batch_preds.shape[-1]:
             log_fn(
                 f"{step_name}_top_{k}_acc",

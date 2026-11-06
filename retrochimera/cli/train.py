@@ -271,9 +271,6 @@ def train(
             save_top_k=model_config.training.num_checkpoints_for_averaging,
             every_n_epochs=1,
         )
-        lr_monitor_callback = pl.callbacks.LearningRateMonitor(logging_interval="step")
-
-        callbacks = [best_checkpoint_callback, last_checkpoint_callback, lr_monitor_callback]
     else:
         best_checkpoint_callback = ModelCheckpoint(
             dirpath=config.checkpoint_dir,
@@ -283,7 +280,8 @@ def train(
             mode="max",
         )
 
-        callbacks = [best_checkpoint_callback, last_checkpoint_callback]
+    lr_monitor_callback = pl.callbacks.LearningRateMonitor(logging_interval="step")
+    callbacks = [best_checkpoint_callback, last_checkpoint_callback, lr_monitor_callback]
 
     # Add callback to unfreeze pretrained weights after warmup epochs
     if frozen_param_names is not None:

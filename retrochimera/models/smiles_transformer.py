@@ -228,7 +228,6 @@ class SmilesTransformerModel(AbstractModel[SmilesReactionSample, ProcessedSample
             f"{step_name}_loss",
             loss,
             prog_bar=True,
-            on_step=True,
             sync_dist=True,
             batch_size=batch_size,
         )
@@ -236,7 +235,6 @@ class SmilesTransformerModel(AbstractModel[SmilesReactionSample, ProcessedSample
             f"{step_name}_token_acc",
             token_acc,
             prog_bar=True,
-            on_step=True,
             sync_dist=True,
             batch_size=batch_size,
         )
@@ -244,7 +242,6 @@ class SmilesTransformerModel(AbstractModel[SmilesReactionSample, ProcessedSample
             f"{step_name}_perplexity",
             perplexity,
             prog_bar=True,
-            on_step=True,
             sync_dist=True,
             batch_size=batch_size,
         )

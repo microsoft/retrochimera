@@ -19,14 +19,13 @@ template_localization_config:
   free_rewrite_embedding_dim: 32
   num_negative_rewrites_in_localization: 4
   training:
-    batch_size: 512
+    batch_size: 1024
     learning_rate: 0.001
-    learning_rate_decay_step_size: 75
-    n_epochs: 85
-    check_val_every_n_epoch: 5
+    learning_rate_decay_step_size: 55
+    n_epochs: 65
+    check_val_every_n_epoch: 1
     num_checkpoints_for_averaging: 10
     n_devices: 4
-    accumulate_grad_batches: 2
   classification_loss_type: softmax
   negative_to_positive_targets_ratio: 18
-  rewrite_encoder_num_epochs: 40
+  rewrite_encoder_num_epochs: 30
