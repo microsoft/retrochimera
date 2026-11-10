@@ -32,7 +32,11 @@ from retrochimera.models.template_localization import TemplateLocalizationModel
 from retrochimera.utils.logging import get_logger
 from retrochimera.utils.misc import convert_camel_to_snake, lookup_by_name
 from retrochimera.utils.pytorch import Float32MatmulPrecision
-from retrochimera.utils.pytorch_lightning import ModelCheckpoint, UnfreezeCallback
+from retrochimera.utils.pytorch_lightning import (
+    ModelCheckpoint,
+    ReactionMetricsCallback,
+    UnfreezeCallback,
+)
 from retrochimera.utils.training import (
     average_checkpoints,
     freeze_pretrained_layers,
@@ -53,6 +57,9 @@ Required arguments:
   checkpoint_dir      Directory where model checkpoints will be saved.
 
 Optional arguments:
+  eval_data_dir             Directory with `{val, test}.jsonl`, as used by `cli/eval.py`.
+                            When set, reaction top-k accuracy and MRR are logged after validation
+                            and testing.
   finetune_checkpoint_path  Path to a pretrained checkpoint for fine-tuning. When specified,
                             the model will load transferable weights from this checkpoint and
                             freeze them, training only the vocabulary-dependent layers (e.g.,
@@ -201,6 +208,8 @@ class TrainConfig(ModelTrainingConfig):
 
     processed_data_dir: str = MISSING  # Directory for saving preprocessed data
     checkpoint_dir: str = MISSING  # Directory to store pytorch lightning model checkpoints
+    eval_data_dir: Optional[str] = None  # Raw reaction data, same format as for `cli/eval.py`
+    eval_batch_size: int = 32  # Products per inference call on each device
     log_dir: str = "."  # Directory to store logs
     seed: int = 0  # Seed to use for all sources of randomness (Python, numpy, torch)
     float32_matmul_precision: Float32MatmulPrecision = Float32MatmulPrecision.highest
@@ -261,6 +270,7 @@ def train(
             * model_config.training.n_epochs
         )
         model.total_steps = total_steps
+        model.hparams["total_steps"] = total_steps
         logger.info(f"Total training steps: {total_steps}")
 
         best_checkpoint_callback = ModelCheckpoint(
@@ -275,13 +285,18 @@ def train(
         best_checkpoint_callback = ModelCheckpoint(
             dirpath=config.checkpoint_dir,
             filename="{epoch}-best",
-            monitor="val_mrr",
+            monitor="val_mrr" if config.eval_data_dir is not None else "val_template_mrr",
             save_top_k=model_config.training.num_checkpoints_for_averaging,
             mode="max",
         )
 
     lr_monitor_callback = pl.callbacks.LearningRateMonitor(logging_interval="step")
     callbacks = [best_checkpoint_callback, last_checkpoint_callback, lr_monitor_callback]
+
+    if config.eval_data_dir is not None:
+        callbacks.append(
+            ReactionMetricsCallback(data_dir=config.eval_data_dir, batch_size=config.eval_batch_size)
+        )
 
     # Add callback to unfreeze pretrained weights after warmup epochs
     if frozen_param_names is not None:

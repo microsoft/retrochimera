@@ -4,6 +4,7 @@ from typing import Iterable, Optional
 
 import torch
 from more_itertools import batched
+from syntheseus.interface.models import BackwardReactionModel
 from torch import nn
 from torch.nn.init import xavier_uniform_, zeros_
 from torch.optim.lr_scheduler import OneCycleLR
@@ -247,6 +248,14 @@ class SmilesTransformerModel(AbstractModel[SmilesReactionSample, ProcessedSample
         )
 
         return loss
+
+    def build_inference_model(self, num_processes: int) -> BackwardReactionModel:
+        from retrochimera.inference.smiles_transformer import LiveSmilesTransformerModel
+
+        return LiveSmilesTransformerModel(
+            model=self,
+            canonicalization_processes=num_processes,
+        )
 
     def construct_input(
         self, token_ids: torch.Tensor, step: Optional[int] = None, is_encoder: bool = True

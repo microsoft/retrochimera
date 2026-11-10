@@ -8,6 +8,9 @@ from syntheseus.reaction_prediction.utils.inference import get_unique_file_in_di
 
 from retrochimera.chem.rewrite import RewriteResult
 from retrochimera.chem.rules import RuleBasedRetrosynthesizer, RulePrediction
+from retrochimera.models.template_localization import (
+    TemplateLocalizationModel as LocalizationModel,
+)
 
 
 class TemplateLocalizationModel(RuleBasedRetrosynthesizer, ExternalBackwardReactionModel):
@@ -19,42 +22,31 @@ class TemplateLocalizationModel(RuleBasedRetrosynthesizer, ExternalBackwardReact
         localization_score_weight: float = 2.25,
         classification_temperature: Optional[float] = 30.0,
         output_temperature: float = 1.0,
+        model: Optional[LocalizationModel] = None,
         **kwargs,
     ) -> None:
         """Initializes the TemplateLocalization model wrapper.
 
         Assumed format of the model directory:
         - `model_dir` contains the model checkpoint as the only `*.ckpt` file
+
+        Pass `model` to wrap a live training model instead of loading a checkpoint from `model_dir`.
         """
-        import torch
-
-        from retrochimera.models.template_localization import (
-            TemplateLocalizationModel as LocalizationModel,
-        )
-
         super().__init__(*args, **kwargs)
         self.start_server(rulebase_dir=self.model_dir)
 
-        self.model = LocalizationModel.load_from_checkpoint(
-            get_unique_file_in_dir(self.model_dir, pattern="*.ckpt")
-        )
+        if model is None:
+            model = LocalizationModel.load_from_checkpoint(
+                get_unique_file_in_dir(self.model_dir, pattern="*.ckpt")
+            )
+            model.to(self.device)
+            model.eval()
+        self.model = model
+
         self._localization_score_weight = localization_score_weight
         self._classification_temperature = classification_temperature
         self._output_temperature = output_temperature
-
-        self.model.to(self.device)
-        self.model.eval()
-
-        # These should be set if the model was loaded from a trained checkpoint.
-        assert self.model.all_rewrites_atom_outputs is not None
-        assert self.model.all_rewrites_batch_idx is not None
-
-        # Unpack the rewrite atom outputs by rule ID. The `batch_idx` tensor is sorted, so we find
-        # group boundaries with `unique_consecutive` and then split.
-        _, counts = torch.unique_consecutive(self.model.all_rewrites_batch_idx, return_counts=True)
-        self.all_rewrites_atom_outputs_list: list[torch.Tensor] = list(
-            torch.split(self.model.all_rewrites_atom_outputs, counts.tolist())
-        )
+        self._rewrite_atom_ranges: Optional[list[tuple[int, int]]] = None
 
     @property
     def _rule_application_server_kwargs(self) -> dict[str, Any]:
@@ -72,6 +64,17 @@ class TemplateLocalizationModel(RuleBasedRetrosynthesizer, ExternalBackwardReact
         import torch
 
         from retrochimera.utils.pytorch import get_sorted_ids_and_probs, tensor_to_list
+
+        assert self.model.all_rewrites_atom_outputs is not None
+        assert self.model.all_rewrites_batch_idx is not None
+
+        # The rulebase fixes atom ranges; cache boundaries rather than views of mutable encodings.
+        if self._rewrite_atom_ranges is None:
+            _, counts = torch.unique_consecutive(
+                self.model.all_rewrites_batch_idx, return_counts=True
+            )
+            ends = counts.cumsum(0).tolist()
+            self._rewrite_atom_ranges = list(zip([0] + ends[:-1], ends))
 
         # Preprocess and batch the inputs.
         input_graphs = self.model.input_encoder.collate(
@@ -100,7 +103,7 @@ class TemplateLocalizationModel(RuleBasedRetrosynthesizer, ExternalBackwardReact
         ):
             input_graph_atom_outputs = torch.t(input_graphs_atom_outputs[input_graphs.batch == idx])
 
-            lhs_chunks = [self.all_rewrites_atom_outputs_list[rule_id] for rule_id in rule_ids]
+            lhs_chunks = [self.model.all_rewrites_atom_outputs[slice(*self._rewrite_atom_ranges[rule_id])] for rule_id in rule_ids]
             chunk_sizes = [c.size(0) for c in lhs_chunks]
 
             all_scores = torch.mm(torch.cat(lhs_chunks, dim=0), input_graph_atom_outputs)

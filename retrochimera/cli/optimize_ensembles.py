@@ -17,12 +17,13 @@ import numpy as np
 import torch
 from omegaconf import MISSING
 from syntheseus import Bag, Molecule, SingleProductReaction
-from syntheseus.reaction_prediction.data.dataset import DataFold, DiskReactionDataset
+from syntheseus.reaction_prediction.data.dataset import DataFold
 from syntheseus.reaction_prediction.data.reaction_sample import ReactionSample
 from syntheseus.reaction_prediction.utils.config import get_config as cli_get_config
 from syntheseus.reaction_prediction.utils.metrics import TopKMetricsAccumulator
 from syntheseus.reaction_prediction.utils.misc import set_random_seed
 
+from retrochimera.data.dataset import SingleProductReactionDataset
 from retrochimera.inference.retrochimera import combine_results
 from retrochimera.utils.logging import get_logger
 from retrochimera.utils.misc import convert_camel_to_snake
@@ -56,8 +57,8 @@ def make_mol(smiles: str) -> Molecule:
 def load_ground_truths(
     data_dir: str, folds: list[DataFold]
 ) -> dict[DataFold, list[tuple[Bag[Molecule], Bag[Molecule]]]]:
-    """Load ground truth outputs for all reactions in the dataset in order."""
-    dataset = DiskReactionDataset(data_dir, sample_cls=ReactionSample)
+    """Load ground truths for single-fragment product reactions in dataset order."""
+    dataset = SingleProductReactionDataset(data_dir, sample_cls=ReactionSample)
     return {fold: [(r.products, r.reactants) for r in dataset[fold]] for fold in folds}
 
 

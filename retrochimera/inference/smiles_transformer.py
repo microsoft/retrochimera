@@ -2,11 +2,13 @@ import argparse
 import math
 from abc import abstractmethod
 from contextlib import nullcontext
-from typing import Any, Generic, Literal, Sequence, TypeVar
+from pathlib import Path
+from typing import Any, Generic, Literal, Optional, Sequence, TypeVar, Union
 
 import torch
 from loky import get_reusable_executor
 from syntheseus import Molecule, Reaction, SingleProductReaction
+from syntheseus.interface.models import BackwardReactionModel
 from syntheseus.interface.reaction import ReactionMetaData
 from syntheseus.reaction_prediction.inference_base import ExternalBackwardReactionModel
 from syntheseus.reaction_prediction.utils.inference import (
@@ -30,7 +32,8 @@ ReactionType = TypeVar("ReactionType", bound=Reaction)
 class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
     def __init__(
         self,
-        *args,
+        model: TransformerModel,
+        *,
         beam_size: int = 20,
         augmentation_size: int = 10,
         max_generated_seq_len: int = 512,
@@ -40,21 +43,13 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
         inference_precision: Literal["float32", "float16", "bfloat16"] = "float32",
         **kwargs,
     ) -> None:
-        """Initializes the SmilesTransformer model wrapper.
+        """Adapt an existing model without changing its device or mode.
 
-        This base class is shared between the backward and forward model variants.
-
-        Assumed format of the model directory:
-        - `model_dir` contains the model checkpoint as the only `*.ckpt` file
-        - `model_dir` contains the vocab path as the only `*.txt` file
+        Decoding is shared between the backward and forward model variants.
         """
-
-        super().__init__(*args, **kwargs)
-
-        if not (hasattr(self, "model_dir") and hasattr(self, "device")):
-            raise ValueError(
-                "Class based on `AbstractSmilesTransformerModel` should extended `ReactionModel`"
-            )
+        super().__init__(**kwargs)
+        self.model = model
+        self.device = str(model.device)
 
         if inference_precision not in {"float32", "float16", "bfloat16"}:
             raise ValueError(f"Unsupported inference_precision {inference_precision}")
@@ -64,15 +59,6 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
             raise ValueError("canonicalization_processes must be positive")
         self._canonicalization_processes = canonicalization_processes
 
-        # There should be exaclty one `*.ckpt` file under `model_dir`.
-        chkpt_path = get_unique_file_in_dir(self.model_dir, pattern="*.ckpt")
-        vocab_path = get_unique_file_in_dir(self.model_dir, pattern="*.txt")
-
-        with suppress_outputs():
-            self.model = TransformerModel.load_from_checkpoint(chkpt_path, vocab_path=vocab_path)
-
-        self.model = self.model.to(self.device)
-        self.model.eval()
 
         # Configure the inference parameters.
         self.beam_size = beam_size
@@ -85,13 +71,6 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
         self.probability_from_score_temperature = probability_from_score_temperature
         self.filter_duplicate_augmentations = filter_duplicate_augmentations
 
-        self.model.tokenizer.log_vocab_info()
-        logger.info(f"Beam size: {self.beam_size}")
-        logger.info(f"Augmentation size: {self.augmentation_size}")
-        logger.info(f"Maximum generated sequence length: {self.max_generated_seq_len}")
-        logger.info(f"Filter duplicate augmentations: {self.filter_duplicate_augmentations}")
-        logger.info(f"Canonicalization processes: {self._canonicalization_processes}")
-        logger.info(f"Inference precision: {inference_precision}")
 
     def _autocast_context(self):
         if self._autocast_dtype == torch.float32 or not self.device.startswith("cuda"):
@@ -195,6 +174,7 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
             n_best=self.beam_size,
             max_length=self.max_generated_seq_len,
             beam_size=self.beam_size,
+            seed=0,  # Leave RNG seeding and backend determinism to the caller.
         )
 
         batch = {}
@@ -234,7 +214,7 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
         # and restarts them on demand, so do not shut down the shared executor here.
         executor = get_reusable_executor(max_workers=self._canonicalization_processes, timeout=300)
         raw_predictions = list(
-            executor.map(canonicalize_smiles_clear_map, lines)
+            executor.map(canonicalize_smiles_clear_map, lines, chunksize=32)
         )  # canonicalize reactants and modify illegal reactants into empty strings
 
         predictions = []
@@ -293,8 +273,41 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
             return self.model.compute_probs(reaction_smiles, minibatch_size=minibatch_size)
 
 
-class SmilesTransformerModel(
-    AbstractSmilesTransformerModel[Molecule, SingleProductReaction], ExternalBackwardReactionModel
+class CheckpointSmilesTransformerModel:
+    """Load a checkpoint before initializing the shared inference adapter."""
+
+    def __init__(
+        self,
+        model_dir: Optional[Union[str, Path]] = None,
+        device: Optional[str] = None,
+        **kwargs,
+    ) -> None:
+        model_dir = Path(model_dir or self.get_default_model_dir())
+        device = device or ("cuda:0" if torch.cuda.is_available() else "cpu")
+        chkpt_path = get_unique_file_in_dir(model_dir, pattern="*.ckpt")
+        vocab_path = get_unique_file_in_dir(model_dir, pattern="*.txt")
+        with suppress_outputs():
+            model = TransformerModel.load_from_checkpoint(chkpt_path, vocab_path=vocab_path)
+        model = model.to(device)
+        model.eval()
+
+        super().__init__(model=model, model_dir=model_dir, device=device, **kwargs)
+
+        self.model.tokenizer.log_vocab_info()
+        logger.debug(f"Beam size: {self.beam_size}")
+        logger.debug(f"Augmentation size: {self.augmentation_size}")
+        logger.debug(f"Maximum generated sequence length: {self.max_generated_seq_len}")
+        logger.debug(f"Filter duplicate augmentations: {self.filter_duplicate_augmentations}")
+        logger.debug(f"Canonicalization processes: {self._canonicalization_processes}")
+        logger.debug(
+            f"Inference precision: {self._autocast_dtype}"
+            if self._autocast_dtype != torch.float32 and self.device.startswith("cuda")
+            else "Inference precision: inherited from caller"
+        )
+
+
+class LiveSmilesTransformerModel(
+    AbstractSmilesTransformerModel[Molecule, SingleProductReaction], BackwardReactionModel
 ):
     def _augment_input(self, input: Molecule) -> list[str]:
         augmented_input = []
@@ -319,3 +332,9 @@ class SmilesTransformerModel(
         self, input: Molecule, output_list: list[str], metadata_list: list[ReactionMetaData]
     ) -> Sequence[SingleProductReaction]:
         return process_raw_smiles_outputs_backwards(input, output_list, metadata_list)
+
+
+class SmilesTransformerModel(
+    CheckpointSmilesTransformerModel, LiveSmilesTransformerModel, ExternalBackwardReactionModel
+):
+    """Checkpoint-backed backward model; the directory contains one checkpoint and vocabulary."""

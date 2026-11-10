@@ -5,6 +5,7 @@ from typing import Any, Iterable, Optional, Union
 
 import torch
 from more_itertools import batched
+from syntheseus.interface.models import BackwardReactionModel
 from syntheseus.reaction_prediction.utils.misc import parallelize
 from torch import nn
 from torch.nn import functional as f
@@ -446,13 +447,26 @@ class TemplateLocalizationModel(AbstractModel[TemplateReactionSample, ProcessedS
         self.log(f"{metric_prefix}_loss", loss, batch_size=batch_size)
         log_classification_metrics(
             log_fn=self.log,
-            step_name=metric_prefix,
+            step_name=f"{step_name}_template" if step_name in {"val", "test"} else metric_prefix,
             batch_preds=classification_logits,
             batch_targets=targets_in_batch,
             batch_size=batch_size,
         )
 
         return loss
+
+    def build_inference_model(self, num_processes: int) -> BackwardReactionModel:
+        from retrochimera.inference.template_localization import (
+            TemplateLocalizationModel as TemplateLocalizationInferenceModel,
+        )
+
+        # The wrapper reads the cached rewrite encodings, which every validation step refreshes.
+        return TemplateLocalizationInferenceModel(
+            model=self,
+            model_dir=self.rulebase_dir,
+            device=str(self.device),
+            num_processes=num_processes,
+        )
 
     def preprocess(
         self, samples: Iterable[TemplateReactionSample], num_processes: int = 0

@@ -22,6 +22,7 @@ from syntheseus.cli import eval_single_step as eval_syntheseus
 from syntheseus.reaction_prediction.inference.config import ModelConfig
 from syntheseus.reaction_prediction.utils.config import get_config as cli_get_config
 
+from retrochimera.data.dataset import SingleProductReactionDataset
 from retrochimera.inference.retrochimera import RetroChimeraModel
 from retrochimera.inference.smiles_transformer import SmilesTransformerModel
 from retrochimera.inference.smiles_transformer_forward import SmilesTransformerForwardModel
@@ -55,6 +56,8 @@ class EvalConfig(BackwardModelConfig, eval_syntheseus.BaseEvalConfig):
 def main(argv: Optional[list[str]]) -> None:
     config: EvalConfig = cli_get_config(argv=argv, config_cls=EvalConfig)
     torch.set_float32_matmul_precision(config.float32_matmul_precision.value)
+    # Syntheseus constructs the dataset internally.
+    eval_syntheseus.DiskReactionDataset = SingleProductReactionDataset  # type: ignore
     eval_syntheseus.run_from_config(config, extra_steps=[])  # type: ignore
 
 

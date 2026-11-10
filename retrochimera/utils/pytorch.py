@@ -30,7 +30,7 @@ def split_select(source: torch.Tensor, indices: torch.Tensor) -> list[torch.Tens
 
 
 def tensor_to_list(t: torch.Tensor):
-    return t.cpu().detach().numpy().tolist()
+    return t.cpu().detach().tolist()
 
 
 def get_sorted_ids_and_probs(logits: torch.Tensor, k: int) -> list[tuple[list[int], list[float]]]:

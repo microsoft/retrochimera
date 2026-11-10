@@ -3,17 +3,21 @@ from typing import Sequence
 
 import numpy as np
 from syntheseus import Bag, Molecule, Reaction
+from syntheseus.interface.models import ForwardReactionModel
 from syntheseus.interface.molecule import SMILES_SEPARATOR
 from syntheseus.interface.reaction import ReactionMetaData
 from syntheseus.reaction_prediction.inference_base import ExternalForwardReactionModel
 from syntheseus.reaction_prediction.utils.inference import process_raw_smiles_outputs_forwards
 
-from retrochimera.inference.smiles_transformer import AbstractSmilesTransformerModel
+from retrochimera.inference.smiles_transformer import (
+    AbstractSmilesTransformerModel,
+    CheckpointSmilesTransformerModel,
+)
 from retrochimera.utils.root_aligned import clear_map_canonical_smiles
 
 
-class SmilesTransformerForwardModel(
-    AbstractSmilesTransformerModel[Bag[Molecule], Reaction], ExternalForwardReactionModel
+class LiveSmilesTransformerForwardModel(
+    AbstractSmilesTransformerModel[Bag[Molecule], Reaction], ForwardReactionModel
 ):
     def _augment_input(self, input: Bag[Molecule]) -> list[str]:
         augmented_input = []
@@ -57,3 +61,11 @@ class SmilesTransformerForwardModel(
         self, input: Bag[Molecule], output_list: list[str], metadata_list: list[ReactionMetaData]
     ) -> Sequence[Reaction]:
         return process_raw_smiles_outputs_forwards(input, output_list, metadata_list)
+
+
+class SmilesTransformerForwardModel(
+    CheckpointSmilesTransformerModel,
+    LiveSmilesTransformerForwardModel,
+    ExternalForwardReactionModel,
+):
+    """Checkpoint-backed forward model; the directory contains one checkpoint and vocabulary."""

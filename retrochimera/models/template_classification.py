@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any, Generic, Iterable, Optional, Union
 
 import torch
+from syntheseus.interface.models import BackwardReactionModel
 from torch.nn import functional as f
 
 from retrochimera.chem.rules import RuleBase
@@ -83,13 +84,23 @@ class MCCModel(AbstractModel[TemplateReactionSample, ProcessedSample, Batch]):
         self.log(f"{step_name}_loss", loss, batch_size=batch_size)
         log_classification_metrics(
             log_fn=self.log,
-            step_name=step_name,
+            step_name=f"{step_name}_template" if step_name in {"val", "test"} else step_name,
             batch_preds=y_hat,
             batch_targets=batch.targets,
             batch_size=batch_size,
         )
 
         return loss
+
+    def build_inference_model(self, num_processes: int) -> BackwardReactionModel:
+        from retrochimera.inference.template_classification import TemplateClassificationModel
+
+        return TemplateClassificationModel(
+            model=self,
+            model_dir=self.rulebase_dir,
+            device=str(self.device),
+            num_processes=num_processes
+        )
 
     def preprocess(
         self, samples: Iterable[TemplateReactionSample], num_processes: int = 0

@@ -3,7 +3,7 @@ from typing import Callable, Generic, Iterable, TypeVar
 
 import pytorch_lightning as pl
 import torch
-from pytorch_lightning.utilities import grad_norm
+from syntheseus.interface.models import BackwardReactionModel
 from torch.nn import functional as f
 from torchmetrics.functional import accuracy
 from torchmetrics.functional.retrieval import retrieval_reciprocal_rank
@@ -42,8 +42,8 @@ class AbstractLightningModel(pl.LightningModule, metaclass=ABCMeta):
 
     def log(self, name, value, *args, **kwargs) -> None:
         if name.startswith("val_") or name.startswith("test_"):
-            # Sync validation and test metrics across devices.
-            kwargs["sync_dist"] = True
+            # Sync validation and test metrics across devices unless already reduced.
+            kwargs.setdefault("sync_dist", True)
 
         super().log(name, value.to(self.device), *args, **kwargs)
 
@@ -80,10 +80,6 @@ class AbstractLightningModel(pl.LightningModule, metaclass=ABCMeta):
             bool(self.trainer.loggers) and interval > 0 and (self.global_step + 1) % interval == 0
         )
 
-    def on_before_optimizer_step(self, optimizer):
-        if self.should_log_training_metrics:
-            self.log_dict(grad_norm(self, norm_type=2))
-
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(
             self.parameters(), lr=self.learning_rate, betas=self.optimizer_betas
@@ -106,6 +102,11 @@ class AbstractModel(
     def preprocess(
         self, samples: Iterable[SampleType], num_processes: int = 0
     ) -> Iterable[ProcessedSampleType]:
+        pass
+
+    @abstractmethod
+    def build_inference_model(self, num_processes: int) -> BackwardReactionModel:
+        """Wrap this live model in its inference class, for evaluation during training."""
         pass
 
     def get_nontransferable_param_prefixes(self) -> list[str]:
