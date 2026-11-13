@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Optional, Sequence, Union
 
+import numpy as np
 from rdkit import RDLogger
 from syntheseus import Bag, Molecule, SingleProductReaction
 from syntheseus.interface.molecule import molecule_bag_to_smiles
@@ -170,7 +171,7 @@ class RulePrediction:
     # The `RulePrediction` object lives from the point when the rule is proposed in
     # `_predict_ranked_rules`, and until it is applied. Models may wish to retain some data computed
     # during the former to use during the latter; these are stored below.
-    localization_scores: Optional[list[list[float]]] = None
+    localization_scores: Optional[Union[list[list[float]], np.ndarray]] = None
 
 
 class RuleBasedRetrosynthesizer:
@@ -315,6 +316,9 @@ class RuleBasedRetrosynthesizer:
         ):
             results: list[RewriteResult] = []
             for raw_result, rule_prediction in zip(raw_results, rule_predictions):
+                localization_scores = rule_prediction.localization_scores
+                if raw_result and isinstance(localization_scores, np.ndarray):
+                    localization_scores = localization_scores.tolist()
                 for r in raw_result:
                     r.metadata.update(
                         {
@@ -323,8 +327,8 @@ class RuleBasedRetrosynthesizer:
                         }
                     )
 
-                    if rule_prediction.localization_scores is not None:
-                        r.metadata["localization_scores"] = rule_prediction.localization_scores
+                    if localization_scores is not None:
+                        r.metadata["localization_scores"] = localization_scores
 
                     results.append(r)
 

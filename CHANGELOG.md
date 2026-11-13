@@ -17,6 +17,7 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - Parallelise tokenizer build in CLI with deterministic ordering ([#56](https://github.com/microsoft/retrochimera/pull/56)) ([@lgeiger])
 - Do not require rulebase for SMILES Transformer preprocessing ([#57](https://github.com/microsoft/retrochimera/pull/57)) ([@lgeiger])
 - Prevent logging failure when `Chem.MolToSmiles` fails ([#59](https://github.com/microsoft/retrochimera/pull/59)) ([@lgeiger])
+- Improve performance of template model eval ([#63](https://github.com/microsoft/retrochimera/pull/63)) ([@lgeiger])
 
 ### Added
 
