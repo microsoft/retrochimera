@@ -1,6 +1,7 @@
 import math
 from typing import Any, Optional, Sequence
 
+import torch
 from syntheseus import Molecule, SingleProductReaction
 from syntheseus.interface.reaction import ReactionMetaData
 from syntheseus.reaction_prediction.inference_base import ExternalBackwardReactionModel
@@ -8,6 +9,7 @@ from syntheseus.reaction_prediction.utils.inference import get_unique_file_in_di
 
 from retrochimera.chem.rewrite import RewriteResult
 from retrochimera.chem.rules import RuleBasedRetrosynthesizer, RulePrediction
+from retrochimera.utils.pytorch import get_sorted_ids_and_probs
 
 
 class TemplateLocalizationModel(RuleBasedRetrosynthesizer, ExternalBackwardReactionModel):
@@ -66,13 +68,10 @@ class TemplateLocalizationModel(RuleBasedRetrosynthesizer, ExternalBackwardReact
     def get_parameters(self):
         return self.model.parameters()
 
+    @torch.inference_mode()
     def _predict_ranked_rules(
         self, targets: list[Molecule], top_k: int = 50
     ) -> list[list[RulePrediction]]:
-        import torch
-
-        from retrochimera.utils.pytorch import get_sorted_ids_and_probs, tensor_to_list
-
         # Preprocess and batch the inputs.
         input_graphs = self.model.input_encoder.collate(
             [self.model.input_encoder.preprocess(target) for target in targets]
@@ -105,7 +104,9 @@ class TemplateLocalizationModel(RuleBasedRetrosynthesizer, ExternalBackwardReact
 
             all_scores = torch.mm(torch.cat(lhs_chunks, dim=0), input_graph_atom_outputs)
             all_scores = torch.nn.functional.log_softmax(all_scores, dim=-1)
-            all_scores_list = tensor_to_list(all_scores)
+            if all_scores.dtype == torch.bfloat16:
+                all_scores = all_scores.float()
+            all_scores_cpu = all_scores.detach().cpu().numpy()
 
             offset = 0
             graph_results = []
@@ -114,7 +115,7 @@ class TemplateLocalizationModel(RuleBasedRetrosynthesizer, ExternalBackwardReact
                     RulePrediction(
                         id=rule_id,
                         prob=rule_prob,
-                        localization_scores=all_scores_list[offset : offset + chunk_size],
+                        localization_scores=all_scores_cpu[offset : offset + chunk_size],
                     )
                 )
                 offset += chunk_size
@@ -127,7 +128,8 @@ class TemplateLocalizationModel(RuleBasedRetrosynthesizer, ExternalBackwardReact
         import torch
 
         scaled_scores = [
-            metadata["combined_score"] / self._output_temperature for metadata in results_metadata  # type: ignore[typeddict-item]
+            metadata["combined_score"] / self._output_temperature
+            for metadata in results_metadata  # type: ignore[typeddict-item]
         ]
         probabilities = torch.nn.functional.softmax(torch.as_tensor(scaled_scores), dim=-1)
 
