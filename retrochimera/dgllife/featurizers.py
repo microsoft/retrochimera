@@ -6,7 +6,7 @@
 import itertools
 import os.path as osp
 from collections import defaultdict
-from functools import partial
+from functools import lru_cache, partial
 
 import numpy as np
 import torch
@@ -14,6 +14,10 @@ from rdkit import Chem, RDConfig
 from rdkit.Chem import AllChem, ChemicalFeatures
 
 # fmt: off
+
+@lru_cache(maxsize=1)
+def _get_feature_factory(fdef_name):
+    return ChemicalFeatures.BuildFeatureFactory(fdef_name)
 
 def one_hot_encoding(x, allowable_set, encode_unknown=False):
     """One-hot encoding.
@@ -559,7 +563,7 @@ class WeaveAtomFeaturizer(object):
 
         # Get information for donor and acceptor
         fdef_name = osp.join(RDConfig.RDDataDir, 'BaseFeatures.fdef')
-        mol_featurizer = ChemicalFeatures.BuildFeatureFactory(fdef_name)
+        mol_featurizer = _get_feature_factory(fdef_name)
         mol_feats = mol_featurizer.GetFeaturesForMol(mol)
         is_donor, is_acceptor = self.get_donor_acceptor_info(mol_feats)
 
