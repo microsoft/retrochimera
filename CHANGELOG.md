@@ -25,6 +25,10 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - Add option to allow multi-fragment products during augmentation ([#58](https://github.com/microsoft/retrochimera/pull/58)) ([@lgeiger])
 - Add opt-in `keep_all_reactants` flag to retain all reactant components during training-data augmentation ([#62](https://github.com/microsoft/retrochimera/pull/62)) ([@jla-gardner])
 
+### Fixed
+
+- Avoid deadlocks in `RuleApplicationServer` ([#65](https://github.com/microsoft/retrochimera/pull/65)) ([@lgeiger])
+
 ## [1.3.0] - 2026-09-21
 
 ### Changed
