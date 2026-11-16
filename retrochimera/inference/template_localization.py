@@ -127,7 +127,7 @@ class TemplateLocalizationModel(RuleBasedRetrosynthesizer, ExternalBackwardReact
         import torch
 
         scaled_scores = [
-            metadata["combined_score"] / self._output_temperature for metadata in results_metadata  # type: ignore[typeddict-item]
+            metadata["combined_score"] / self._output_temperature for metadata in results_metadata
         ]
         probabilities = torch.nn.functional.softmax(torch.as_tensor(scaled_scores), dim=-1)
 

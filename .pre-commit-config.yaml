@@ -1,34 +1,19 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.4.0
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # v6.0.0
     hooks:
       - id: check-added-large-files
         args: ['--maxkb=500', '--enforce-all']
 
-  # Using this mirror lets us use mypyc-compiled black, which is about 2x faster
-  - repo: https://github.com/psf/black-pre-commit-mirror
-    rev: 22.3.0
-    hooks:
-      - id: black
-
-  - repo: https://github.com/pycqa/isort
-    rev: 5.12.0
-    hooks:
-      - id: isort
-        args: ["--settings=pyproject.toml", "--config-root=.", "--resolve-all-configs"]
-
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.10.1
+    rev: fc0f09a29bb495f4a91f00266155d6282d52485d # v1.20.2
     hooks:
       - id: mypy
         files: '^.*(?<!conftest)\.py'
-        args:
-          - --ignore-missing-imports
-          - --no-namespace-packages
-          - --python-version=3.9
 
-  - repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: 'v0.2.1'
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: 25bcf95026b96e2dd3c0aec3090c3d6ef6ca2e6c # v0.17.3
     hooks:
-      - id: ruff
+      - id: ruff-check
         args: [--fix]
+      - id: ruff-format

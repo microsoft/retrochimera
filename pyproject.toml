@@ -46,27 +46,14 @@ namespaces = false
 
 [tool.setuptools_scm]
 
-[tool.black]
-line-length = 100
-include = '\.pyi?$'
-exclude = '''
-/(
-    \.git
-  | \.mypy_cache
-  | build
-  | dist
-)/
-'''
-
 [tool.coverage.run]
 include = ["./retrochimera/*"]
 
-[tool.isort]
-profile = "black"
-line_length = 100
-
 [tool.mypy]
 verbosity = 0
+python_version = 3.9
+ignore_missing_imports = true
+allow_redefinition = true
 
 [[tool.mypy.overrides]]
 module = [
@@ -79,7 +66,6 @@ module = [
     "torch_geometric.*",
     "tqdm.*",
 ]
-ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 addopts = ["--color=yes", "--doctest-modules"]
@@ -88,8 +74,8 @@ addopts = ["--color=yes", "--doctest-modules"]
 line-length = 100
 
 [tool.ruff.lint]
-# Check https://beta.ruff.rs/docs/rules/ for full list of rules
-select = ["E", "W", "F", "PLE"]
+# Check https://docs.astral.sh/ruff/rules/ for full list of rules
+select = ["E", "W", "F", "I", "PLE"]
 ignore = [
   "W605",  # Invalid escape sequence -- triggered by regex patterns
   "E501",  # Line too long -- triggered by comments and such (black deals with shortening)

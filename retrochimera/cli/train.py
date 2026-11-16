@@ -22,6 +22,7 @@ from omegaconf import MISSING, OmegaConf
 from syntheseus.reaction_prediction.utils.misc import set_random_seed
 
 import retrochimera
+import retrochimera.encoders
 from retrochimera.chem.rules import RuleBase
 from retrochimera.data.processed_dataset import ProcessedDataModule
 from retrochimera.encoders.configs import ChemEncoderConfig, GNNEncoderConfig

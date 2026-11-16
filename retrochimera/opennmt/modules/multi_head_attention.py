@@ -11,6 +11,7 @@ Original Source: https://github.com/OpenNMT/OpenNMT-py/blob/v3.5.1/onmt/modules/
 Modifications:
 1. Removed the `self.parallel_gpu` attribute and corresponding logic from the `MultiHeadedAttention` class, including calls to `torch.distributed.all_reduce` and `torch.nn.utils.skip_init`.
 """
+
 from importlib import import_module
 from math import log, sqrt
 from typing import Optional, Tuple
@@ -283,9 +284,9 @@ class MultiHeadedAttention(torch.nn.Module):
         num_kv=0,
         use_ckpting=[],
     ) -> None:
-        assert (
-            model_dim % head_count == 0
-        ), "Model dimension must be divisible by the number of heads"
+        assert model_dim % head_count == 0, (
+            "Model dimension must be divisible by the number of heads"
+        )
         self.dim_per_head = model_dim // head_count
         super(MultiHeadedAttention, self).__init__()
         self.head_count = head_count

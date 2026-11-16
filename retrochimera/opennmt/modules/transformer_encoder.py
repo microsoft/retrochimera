@@ -13,6 +13,7 @@ Modifications:
 2. Removed the `embeddings` argument from the `TransformerEncoder` constructor, as it is now built in the `retrochimera.models.smiles_transformer.SmilesTransformerModel` class.
 3. Refactored the `forward` method of the `TransformerEncoder` class to align with the `retrochimera.models.smiles_transformer.SmilesTransformerModel` class.
 """
+
 import torch
 import torch.nn as nn
 

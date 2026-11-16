@@ -9,6 +9,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 Original Source: https://github.com/OpenNMT/OpenNMT-py/blob/v3.5.1/onmt/translate/decode_strategy.py
 """
+
 import random
 from copy import deepcopy
 from typing import Optional
@@ -240,9 +241,9 @@ class DecodeStrategy(object):
         )
         if target_prefix is not None:
             seq_len, batch_size, n_feats = target_prefix.size()
-            assert (
-                batch_size == self.batch_size * self.parallel_paths
-            ), "forced target_prefix should've extend to same number of path!"
+            assert batch_size == self.batch_size * self.parallel_paths, (
+                "forced target_prefix should've extend to same number of path!"
+            )
             target_prefix_words = target_prefix[:, :, 0].transpose(0, 1)
             target_prefix = target_prefix_words[:, 1:]  # remove bos
 
@@ -323,7 +324,6 @@ class DecodeStrategy(object):
 
         forbidden_tokens = list()
         for path_idx, seq in zip(self.select_indices, self.alive_seq):
-
             # Reordering forbidden_tokens following beam selection
             # We rebuild a dict to ensure we get the value and not the pointer
             forbidden_tokens.append(deepcopy(self.forbidden_tokens[path_idx]))

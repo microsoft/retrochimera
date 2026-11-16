@@ -75,7 +75,7 @@ class ProcessingStep:
         self, sample: ReactionSample, prefix: str = "filtered", suffix: str = ""
     ) -> None:
         self._samples_saved[f"{prefix}_by_step_{self._name}{suffix}"].append(
-            sample.metadata["original_str"]  # type: ignore[typeddict-item]
+            sample.metadata["original_str"]
         )
 
     def process_samples(self, samples: Iterable[ReactionSample]) -> Iterable[ReactionSample]:
@@ -121,11 +121,11 @@ class ProcessingStep:
 def replace_reaction_smiles(sample: ReactionSample, new_reaction_smiles: str) -> ReactionSample:
     assert sample.mapped_reaction_smiles is not None
 
-    old_str: str = sample.metadata.get("repaired_str", sample.metadata["original_str"])  # type: ignore
+    old_str: str = sample.metadata.get("repaired_str", sample.metadata["original_str"])
     new_str = old_str.replace(sample.mapped_reaction_smiles, new_reaction_smiles)
 
     sample = dataclasses.replace(sample, mapped_reaction_smiles=new_reaction_smiles)
-    sample.metadata["repaired_str"] = new_str  # type: ignore[typeddict-item]
+    sample.metadata["repaired_str"] = new_str
 
     return sample
 

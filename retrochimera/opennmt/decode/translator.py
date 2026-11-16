@@ -16,6 +16,7 @@ Modifications:
 4. Switched `torch.no_grad()` to `torch.inference_mode()` for better performance.
 5. Optimized code for more efficient tensor operations and memory usage.
 """
+
 from typing import Any, Optional, Union
 
 import torch
@@ -178,7 +179,7 @@ class Translator(object):
 
         target_prefix = batch["tgt"] if self.tgt_prefix else None  # None
 
-        (fn_map_state, memory_bank, memory_lengths, src_map,) = decode_strategy.initialize(
+        fn_map_state, memory_bank, memory_lengths, src_map = decode_strategy.initialize(
             memory_bank, src_lengths, src_map, target_prefix=target_prefix
         )
         # [returns]
@@ -211,9 +212,7 @@ class Translator(object):
 
         # (3) Begin decoding step by step:
         for step in range(decode_strategy.max_length):
-            decoder_input = decode_strategy.current_predictions.view(
-                1, -1, 1
-            )  # type: ignore[override]
+            decoder_input = decode_strategy.current_predictions.view(1, -1, 1)
             # shape of decoder_input: (1, self.batch_size * self.parallel_paths, 1)
 
             log_probs, attn = self._decode_and_generate(
@@ -239,12 +238,12 @@ class Translator(object):
                 )  # shape: (batch_size * beam_size, vocab_size)
 
                 assert log_probs.dim() == 2, f"Expected 2D tensor, got {log_probs.dim()}"
-                assert log_probs.size(0) == decoder_input.size(
-                    1
-                ), f"Expected {batch_size * parallel_paths}, got {log_probs.size(0)}"
-                assert (
-                    log_probs.size(1) == vocab_size
-                ), f"Expected {vocab_size}, got {log_probs.size(1)}"
+                assert log_probs.size(0) == decoder_input.size(1), (
+                    f"Expected {batch_size * parallel_paths}, got {log_probs.size(0)}"
+                )
+                assert log_probs.size(1) == vocab_size, (
+                    f"Expected {vocab_size}, got {log_probs.size(1)}"
+                )
 
             decode_strategy.advance(log_probs, attn)
             any_finished = decode_strategy.is_finished.any()
@@ -307,9 +306,9 @@ class Translator(object):
         )  # shape: (padded_src_len, batch_size, hidden_dim)
 
         if src_lengths is None:
-            assert not isinstance(
-                memory_bank, tuple
-            ), "Ensemble decoding only supported for text data"
+            assert not isinstance(memory_bank, tuple), (
+                "Ensemble decoding only supported for text data"
+            )
             src_lengths = (
                 torch.Tensor(batch["batch_size"])
                 .type_as(memory_bank)

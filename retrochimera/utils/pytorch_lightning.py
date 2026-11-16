@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 
 import pytorch_lightning as pl
 from pytorch_lightning import callbacks as pl_callbacks
@@ -37,6 +37,7 @@ class ModelCheckpoint(pl_callbacks.ModelCheckpoint):
                 "found in the checkpoint. Updating all paths with the new prefix."
             )
             assert self.dirpath is not None
+            dirpath_from_ckpt = cast(str, dirpath_from_ckpt)
 
             for key in [
                 "dirpath",

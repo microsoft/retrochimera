@@ -348,7 +348,7 @@ class RuleBasedRetrosynthesizer:
 
                 seen_outputs.add(r.mols)
 
-                metadata: ReactionMetaData = r.metadata  # type: ignore
+                metadata: ReactionMetaData = r.metadata
                 metadata["reaction_smiles"] = f"{molecule_bag_to_smiles(r.mols)}>>{input.smiles}"
 
                 results_mols.append(r.mols)
@@ -368,7 +368,7 @@ class RuleBasedRetrosynthesizer:
     def _fill_prediction_probability(self, results_metadata: list[ReactionMetaData]) -> None:
         """Fill in the `probability` value for predictions for a single input."""
         for metadata in results_metadata:
-            metadata["probability"] = metadata["template_probability"]  # type: ignore[typeddict-item]
+            metadata["probability"] = metadata["template_probability"]
 
     def _rerank_results(self, results: list[RewriteResult]) -> None:
         """Optionally reorder the predictions."""

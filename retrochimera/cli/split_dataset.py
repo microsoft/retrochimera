@@ -170,7 +170,7 @@ def filter_dataset(data: list[ReactionSample], config: SplitDatasetConfig) -> li
                 del reactant.metadata["rdkit_mol"]
 
         if "repaired_str" in sample.metadata:
-            sample.metadata["original_str"] = sample.metadata["repaired_str"]  # type: ignore[typeddict-item]
+            sample.metadata["original_str"] = sample.metadata["repaired_str"]
 
         final_data.append(sample)
 
@@ -308,7 +308,7 @@ def split_dataset(config: SplitDatasetConfig) -> None:
 
         with open(Path(config.output_dir) / f"{fold.value}.smi", "wt") as f:
             for datapoint in datapoints:
-                original_str = datapoint.metadata["original_str"]  # type: ignore[typeddict-item]
+                original_str = datapoint.metadata["original_str"]
                 f.write(f"{original_str}\n")
 
 

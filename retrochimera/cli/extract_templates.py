@@ -261,7 +261,7 @@ def process_smiles(
 
     for fold, samples in output.samples.items():
         logger.info(f"Saving samples into fold {fold}")
-        DiskReactionDataset.save_samples_to_file(data_dir=output_dir, fold=fold, samples=samples)  # type: ignore
+        DiskReactionDataset.save_samples_to_file(data_dir=output_dir, fold=fold, samples=samples)
 
 
 def run_from_config(config: ExtractTemplatesConfig) -> None:

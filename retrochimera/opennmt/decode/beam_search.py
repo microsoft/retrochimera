@@ -13,6 +13,7 @@ Modifications:
 2. Introduced the `customised_beam_search` attribute and corresponding logic to the `BeamSearch` class, enabling optimized beam search for retrosynthesis prediction.
 3. Snapshot tensors to CPU in `update_finished` once instead of per each access.
 """
+
 from typing import Optional
 
 import torch

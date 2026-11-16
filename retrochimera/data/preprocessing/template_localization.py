@@ -86,7 +86,7 @@ def preprocess_samples(
         zip(
             samples_batch,
             server.apply_rules(
-                inputs=[product for product, _, _, in samples_batch],
+                inputs=[product for product, _, _ in samples_batch],
                 rule_ids_to_apply=[[target] for _, _, target in samples_batch],
             ),
         )

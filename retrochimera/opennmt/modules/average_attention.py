@@ -9,6 +9,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 Original Source: https://github.com/OpenNMT/OpenNMT-py/blob/v3.5.1/onmt/modules/average_attn.py
 """
+
 from typing import Optional
 
 import torch

@@ -31,10 +31,7 @@ def test_map_state_can_reorder_only_self_attention(self_attn_type: str) -> None:
     layer = decoder.transformer_layers[0]
     context_keys = torch.arange(16).view(4, 2, 2)
     context_values = context_keys + 100
-    layer.context_attn.layer_cache = True, {
-        "keys": context_keys,
-        "values": context_values,
-    }
+    layer.context_attn.layer_cache = (True, {"keys": context_keys, "values": context_values})
 
     if isinstance(layer.self_attn, AverageAttention):
         self_state = torch.arange(16).view(4, 1, 4)
@@ -43,11 +40,10 @@ def test_map_state_can_reorder_only_self_attention(self_attn_type: str) -> None:
         self_keys = torch.arange(16).view(4, 2, 2)
         self_values = self_keys + 100
         key_pad_mask = torch.tensor([[False, True], [True, False], [False, False], [True, True]])
-        layer.self_attn.layer_cache = True, {
-            "keys": self_keys,
-            "values": self_values,
-            "key_pad_mask": key_pad_mask,
-        }
+        layer.self_attn.layer_cache = (
+            True,
+            {"keys": self_keys, "values": self_values, "key_pad_mask": key_pad_mask},
+        )
 
     src = decoder.state["src"]
     select_indices = torch.tensor([1, 0, 3, 2])

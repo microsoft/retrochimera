@@ -43,7 +43,7 @@ mol = Molecule("Oc1ccc(OCc2ccccc2)c(Br)c1")
 predictions = model([mol], num_results=3)
 
 for p in predictions[0]:
-    print(p, f"({100. * p.metadata['probability']:.2f}%)")
+    print(p, f"({100.0 * p.metadata['probability']:.2f}%)")
 ```
 
 For installation, there are two additional dependency groups: `dev` for running tests, and `graphium` for building the model architecture we used for USPTO-50K; if you care about running the USPTO-50K checkpoint, you need to install via `pip install retrochimera[graphium]`.

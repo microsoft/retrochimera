@@ -55,7 +55,7 @@ class EvalConfig(BackwardModelConfig, eval_syntheseus.BaseEvalConfig):
 def main(argv: Optional[list[str]]) -> None:
     config: EvalConfig = cli_get_config(argv=argv, config_cls=EvalConfig)
     torch.set_float32_matmul_precision(config.float32_matmul_precision.value)
-    eval_syntheseus.run_from_config(config, extra_steps=[])  # type: ignore
+    eval_syntheseus.run_from_config(config, extra_steps=[])
 
 
 if __name__ == "__main__":

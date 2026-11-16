@@ -193,7 +193,7 @@ def combine_results(
     metadata_list = []
     for rct in combined_results:
         metadata_list.append(
-            ReactionMetaData(  # type: ignore[typeddict-unknown-key]
+            ReactionMetaData(
                 score=result_to_score[rct],
                 individual_ranks={
                     model_name: result_to_ranks[rct][idx]
