@@ -32,9 +32,8 @@ def _worker_process(
 
             if request is None:
                 break
-            else:
-                smiles, rule_ids = request
 
+            for smiles, rule_ids in request:
                 # SMILES comes from a `Molecule` object in the main process, so it is already canonical.
                 mol = Molecule(smiles, canonicalize=False)
 
@@ -243,13 +242,17 @@ class RuleApplicationServer:
                 )
 
         def send_tasks_to_process(process_id: int) -> None:
-            for input, rules in zip(inputs, rules_to_apply_per_process):
-                if rules[process_id]:
-                    self._connection_try_send(
-                        process_id=process_id,
-                        restart_on_failure=True,
-                        data=(input.smiles, [rule_id for _, rule_id in rules[process_id]]),
-                    )
+            requests = [
+                (input.smiles, [rule_id for _, rule_id in rules[process_id]])
+                for input, rules in zip(inputs, rules_to_apply_per_process)
+                if rules[process_id]
+            ]
+            if requests:
+                # Send one message so the worker finishes reading before replying; otherwise both
+                # directions of the pipe can fill and deadlock.
+                self._connection_try_send(
+                    process_id=process_id, restart_on_failure=True, data=requests
+                )
 
         for process_id in range(self._num_processes):
             send_tasks_to_process(process_id)
