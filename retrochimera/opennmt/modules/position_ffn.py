@@ -11,6 +11,7 @@ Original Source: https://github.com/OpenNMT/OpenNMT-py/blob/v3.5.1/onmt/modules/
 Modifications:
 1. Removed the `self.parallel_gpu` attribute and corresponding logic from the `PositionwiseFeedForward` class, including calls to `torch.distributed.all_reduce` and `torch.nn.utils.skip_init`.
 """
+
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint

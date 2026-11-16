@@ -61,7 +61,7 @@ def load_from_h5py(entry: Union[h5py.Dataset, h5py.Group]) -> Any:
     elif cls is scipy.sparse.dok_matrix:
         assert isinstance(entry, h5py.Group)
 
-        matrix = scipy.sparse.dok_matrix(tuple(entry["shape"]), dtype="i")
+        matrix = scipy.sparse.dok_matrix(tuple(entry["shape"]), dtype="i")  # type: ignore[operator]
         for (key_row, key_col), value in zip(entry["keys"], entry["values"]):
             matrix[key_row, key_col] = value
 

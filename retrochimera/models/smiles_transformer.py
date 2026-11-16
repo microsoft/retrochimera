@@ -293,9 +293,9 @@ class SmilesTransformerModel(AbstractModel[SmilesReactionSample, ProcessedSample
 
         # Start from step.
         step = step or 0
-        assert (
-            self.positional_encoding.shape[0] >= step + token_embs.shape[1]
-        ), f"Sequence is {step + token_embs.shape[1]} but PositionalEncoding is {self.positional_encoding.shape[0]}. See max_len argument."
+        assert self.positional_encoding.shape[0] >= step + token_embs.shape[1], (
+            f"Sequence is {step + token_embs.shape[1]} but PositionalEncoding is {self.positional_encoding.shape[0]}. See max_len argument."
+        )
 
         positional_embs = self.positional_encoding[step : step + seq_len, :].unsqueeze(
             0
@@ -365,9 +365,9 @@ class SmilesTransformerModel(AbstractModel[SmilesReactionSample, ProcessedSample
             enc_key_padding_mask=memory_padding_mask,
         )  # shape: (batch_size, tgt_len-1, hidden_dim)
         token_output = self.token_fc(model_output)  # shape: (batch_size, tgt_len - 1, hidden_dim)
-        assert (
-            token_output.size(1) == seq_len and token_output.size(2) == self.vocab_size
-        ), f"{token_output.size()}"
+        assert token_output.size(1) == seq_len and token_output.size(2) == self.vocab_size, (
+            f"{token_output.size()}"
+        )
 
         token_log_probs = self.log_softmax(
             token_output

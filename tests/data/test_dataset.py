@@ -31,7 +31,7 @@ def test_save_and_load(tmp_path: str, mapped: bool, include_templates: bool) -> 
     ]
 
     for fold in DataFold:
-        DiskReactionDataset.save_samples_to_file(data_dir=tmp_path, fold=fold, samples=samples)  # type: ignore
+        DiskReactionDataset.save_samples_to_file(data_dir=tmp_path, fold=fold, samples=samples)
 
     if include_templates:
         rulebase = RuleBase()

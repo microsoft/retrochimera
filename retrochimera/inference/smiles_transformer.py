@@ -78,9 +78,9 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
         self.beam_size = beam_size
         self.augmentation_size = augmentation_size
         self.max_generated_seq_len = max_generated_seq_len
-        assert (
-            self.max_generated_seq_len <= self.model.max_seq_len
-        ), f"The maximum generated sequence length should be less than or equal to the maximum sequence length supported by the model (e.g., for position encoding): {self.model.max_seq_len}."
+        assert self.max_generated_seq_len <= self.model.max_seq_len, (
+            f"The maximum generated sequence length should be less than or equal to the maximum sequence length supported by the model (e.g., for position encoding): {self.model.max_seq_len}."
+        )
 
         self.probability_from_score_temperature = probability_from_score_temperature
         self.filter_duplicate_augmentations = filter_duplicate_augmentations
@@ -117,13 +117,13 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
         adaptive_augmentation_size = additional_info["adaptive_augmentation_size"]
         effective_augmentation_size = additional_info["effective_augmentation_size"]
 
-        assert len(scores) == len(
-            position_prob_tuples
-        ), f"Number of scores ({len(scores)}) does not match number of info entries ({len(position_prob_tuples)})"
+        assert len(scores) == len(position_prob_tuples), (
+            f"Number of scores ({len(scores)}) does not match number of info entries ({len(position_prob_tuples)})"
+        )
 
         for kwargs, position_prob_tuple in zip(kwargs_list, position_prob_tuples):
             kwargs.update(
-                {  # type: ignore[misc]
+                {
                     "position_prob_tuple": position_prob_tuple,
                     "adaptive_augmentation_size": adaptive_augmentation_size,
                     "effective_augmentation_size": effective_augmentation_size,
@@ -183,7 +183,7 @@ class AbstractSmilesTransformerModel(Generic[InputType, ReactionType]):
         augmented_batch = self._smiles_to_batch(augmented_inputs)
 
         augmented_batch_to_device = {
-            key: val.to(self.device) if type(val) == torch.Tensor else val  # type: ignore[attr-defined]
+            key: val.to(self.device) if isinstance(val, torch.Tensor) else val  # type: ignore[attr-defined]
             for key, val in augmented_batch.items()
         }
 

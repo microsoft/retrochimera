@@ -14,6 +14,7 @@ Modifications:
 3. Removed two unused classes: `TransformerLMDecoderLayer` and `TransformerLMDecoder`.
 3. Refactored the `forward` method of the `TransformerDecoder` class to align with the `retrochimera.models.smiles_transformer.SmilesTransformerModel` class.
 """
+
 from typing import Optional
 
 import torch
@@ -474,11 +475,10 @@ class TransformerDecoderBase(nn.Module):
                             z = fn(layer.self_attn.layer_cache[1]["key_pad_mask"], 0)
                         else:
                             z = None
-                        layer.self_attn.layer_cache = True, {
-                            "keys": x,
-                            "values": y,
-                            "key_pad_mask": z,
-                        }
+                        layer.self_attn.layer_cache = (
+                            True,
+                            {"keys": x, "values": y, "key_pad_mask": z},
+                        )
 
     def detach_state(self):
         raise NotImplementedError
@@ -698,11 +698,14 @@ class TransformerDecoder(TransformerDecoderBase):
                 },
             )
             if isinstance(layer.self_attn, AverageAttention):
-                layer.self_attn.layer_cache = True, {
-                    "prev_g": torch.zeros((batch_size, 1, depth), device=enc_out.device).to(
-                        enc_out.dtype
-                    )
-                }
+                layer.self_attn.layer_cache = (
+                    True,
+                    {
+                        "prev_g": torch.zeros((batch_size, 1, depth), device=enc_out.device).to(
+                            enc_out.dtype
+                        )
+                    },
+                )
             else:
                 layer.self_attn.layer_cache = (
                     True,

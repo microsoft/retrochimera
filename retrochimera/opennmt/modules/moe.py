@@ -11,6 +11,7 @@ Original Source: https://github.com/OpenNMT/OpenNMT-py/blob/v3.5.1/onmt/modules/
 Modifications:
 1. Removed the `self.parallel_gpu` attribute and corresponding logic from the `MoE` class, including calls to `torch.distributed.all_reduce`.
 """
+
 import torch
 import torch.nn as nn
 

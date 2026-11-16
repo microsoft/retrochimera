@@ -237,7 +237,7 @@ def preprocess(
                 f.write("{}\n".format(json.dumps(updated_reaction)))
 
     for key, value in skip_dict.items():
-        logger.info(f"{value} samples marked as {key} ({100. * value / len(reaction_list)}%)")
+        logger.info(f"{value} samples marked as {key} ({100.0 * value / len(reaction_list)}%)")
 
 
 def run_from_config(config: AugmentRSMILESConfig) -> None:

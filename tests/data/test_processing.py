@@ -15,7 +15,7 @@ from retrochimera.data.processing import (
 
 def make_sample(reaction_smiles: str) -> ReactionSample:
     sample = ReactionSample.from_reaction_smiles_strict(reaction_smiles, mapped=True)
-    sample.metadata["original_str"] = reaction_smiles  # type: ignore[typeddict-item]
+    sample.metadata["original_str"] = reaction_smiles
 
     return sample
 
@@ -29,8 +29,8 @@ def run_step_and_compare(
         assert output.reactants == expected_output.reactants
         assert output.products == expected_output.products
         assert (
-            output.metadata.get("repaired_str", output.metadata["original_str"])  # type: ignore[typeddict-item]
-            == expected_output.metadata["original_str"]  # type: ignore[typeddict-item]
+            output.metadata.get("repaired_str", output.metadata["original_str"])
+            == expected_output.metadata["original_str"]
         )
 
 

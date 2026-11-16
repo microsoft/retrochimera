@@ -31,7 +31,7 @@ def deduplicate_dataset(config: DeduplicateDatasetConfig) -> None:
     logger.info(f"Parsed {len(data)} valid samples\n")
 
     for d in data:
-        unique_samples[d.reaction_smiles].add(d.metadata["original_str"])  # type: ignore
+        unique_samples[d.reaction_smiles].add(d.metadata["original_str"])
     logger.info(f"Number of unique reaction SMILES: {len(unique_samples)}")
 
     # Save unique reaction SMILES.
