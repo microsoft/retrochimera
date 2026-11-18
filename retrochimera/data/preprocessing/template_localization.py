@@ -79,7 +79,8 @@ def preprocess_samples(
     )
 
     # Get rid of labels which are not in the `rulebase` (e.g. they were too rare).
-    samples_processed = (sample for sample in samples_processed if sample[-1] in server.rule_ids)
+    rule_ids = set(server.rule_ids)
+    samples_processed = (sample for sample in samples_processed if sample[-1] in rule_ids)
 
     # Rerun templates to determine ground-truth localizations.
     samples_processed = itertools.chain.from_iterable(
