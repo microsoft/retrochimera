@@ -30,6 +30,16 @@ def test_rewrite_removes_deleted_atoms_only_when_localizing(return_localization:
     assert result.metadata == ({"localizations": [[1, 2]]} if return_localization else {})
 
 
+def test_rewrite_drops_stale_non_tetrahedral_stereo() -> None:
+    rewrite = Rewrite.from_rdkit("[Cl:1]>>[Cl:1]")
+    [result] = rewrite.apply(Molecule("F[Pt@SP1](Cl)(Br)I"))
+    [product] = result.mols
+    assert all(
+        not atom.HasProp("_chiralPermutation") or atom.GetIntProp("_chiralPermutation") == 0
+        for atom in product.rdkit_mol.GetAtoms()
+    )
+
+
 @pytest.mark.parametrize(
     "template, num_mapped",
     [

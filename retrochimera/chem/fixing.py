@@ -132,7 +132,9 @@ def fix_mol(mol: Chem.Mol) -> Optional[str]:
     """
     try:
         mol.UpdatePropertyCache(False)
-        cp = Chem.Mol(mol)
+        # Reaction products may retain stale non-tetrahedral stereo permutations.
+        # The binary round-trip drops those properties; a direct Mol copy does not.
+        cp = Chem.Mol(mol.ToBinary())
         Chem.SanitizeMol(cp)
         mol = cp
         return Chem.MolToSmiles(mol)
