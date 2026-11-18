@@ -341,6 +341,8 @@ class RuleApplicationServer:
                     ready = [(key.fileobj, key.data) for key, _ in selector.select(wait_time)]
                 handled = set()
                 for handle, (process_id, connection) in ready:
+                    # Ignore stale events after a restart: file descriptors can be reused,
+                    # but the replacement worker has a different connection object.
                     if (
                         not rules_to_apply_per_process[process_id]
                         or self._connections[process_id] is not connection

@@ -182,6 +182,8 @@ class Rewrite:
 
             if smiles is None:
                 continue
+            # Identical products can come from different atom matches: reuse parsing,
+            # but keep every localization for scoring below.
             if smiles not in smiles_to_index:
                 mols = _molecule_bag_from_smiles(smiles)
                 index = None

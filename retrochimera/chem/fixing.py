@@ -139,6 +139,8 @@ def fix_mol(mol: Chem.Mol) -> Optional[str]:
     except (Chem.AtomValenceException, Chem.AtomKekulizeException):
         return None
     except ValueError:
+        # Repair only changes aromatic-N hydrogens; avoid its expensive recursive search
+        # when there are no aromatic nitrogens to adjust.
         if not mol.HasSubstructMatch(_AROMATIC_N_QUERY):
             return None
         mol_adjusted = adjust_aromatic_Ns(mol)
