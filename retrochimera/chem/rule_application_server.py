@@ -1,16 +1,21 @@
+import os
 import random
+import selectors
 import weakref
 from collections import deque
+from contextlib import ExitStack
+from itertools import groupby
 from multiprocessing import Pipe, Process
-from multiprocessing.connection import Connection
+from multiprocessing.connection import Connection, wait
 from pathlib import Path
+from time import monotonic
 from typing import Any, Deque, Optional, Union
 
 from more_itertools import divide
 from syntheseus.interface.molecule import Molecule
 from syntheseus.reaction_prediction.utils.misc import cpu_count, suppress_rdkit_outputs
 
-from retrochimera.chem.rewrite import RewriteResult
+from retrochimera.chem.rewrite import RewriteResult, _cached_component
 from retrochimera.chem.rules import RuleBase, get_products
 from retrochimera.utils.logging import get_logger
 
@@ -29,6 +34,8 @@ def _worker_process(
     with suppress_rdkit_outputs():
         while True:
             request = connection.recv()
+            # Bound graph lifetimes to one batch, including on worker shutdown.
+            _cached_component.cache_clear()
 
             if request is None:
                 break
@@ -129,6 +136,10 @@ class RuleApplicationServer:
                     self._restart_process(process_id)
                 else:
                     break
+        else:
+            raise RuntimeError(
+                f"Could not {fn_name} to process {process_id} after {MAX_RETRIES} tries"
+            )
 
     def _connection_try_send(self, process_id: int, restart_on_failure: bool, data: Any) -> None:
         self._connection_try_call(
@@ -222,30 +233,32 @@ class RuleApplicationServer:
         Args:
             inputs: Molecules to apply the rules to.
             rule_ids_to_apply: Rule IDs to apply for each input.
-            timeout: Maximum amount of time to wait for applying a single rule. If we cannot obtain
+            timeout: Maximum amount of time to wait for the next rule result from each worker.
+                `None` disables timeouts. If we cannot obtain
                 the result within that time (which could be due to the underlying `rdkit` code
                 taking too long to match the rule or any other failures in the child process) then
-                no results are returned for that specific rule, as if it did not match.
+                no results are returned for that specific rule, as if it did not match. The worker
+                is restarted and its remaining rules are resubmitted.
 
         Returns:
             A nested list of results in a layout matching `rule_ids_to_apply`.
         """
-        # shape: `[batch_size, num_processes, num_rules_to_apply, 2]`
-        rules_to_apply_per_process: list[list[Deque[tuple[int, int]]]] = [
-            [deque() for _ in range(self._num_processes)] for _ in inputs
+        rules_to_apply_per_process: list[Deque[tuple[int, int, int]]] = [
+            deque() for _ in range(self._num_processes)
         ]
 
         for input_idx, rule_ids in enumerate(rule_ids_to_apply):
             for idx, rule_id in enumerate(rule_ids):
-                rules_to_apply_per_process[input_idx][self._rule_id_to_process_id[rule_id]].append(
-                    (idx, rule_id)
+                rules_to_apply_per_process[self._rule_id_to_process_id[rule_id]].append(
+                    (input_idx, idx, rule_id)
                 )
 
         def send_tasks_to_process(process_id: int) -> None:
             requests = [
-                (input.smiles, [rule_id for _, rule_id in rules[process_id]])
-                for input, rules in zip(inputs, rules_to_apply_per_process)
-                if rules[process_id]
+                (inputs[input_idx].smiles, [rule_id for _, _, rule_id in rules])
+                for input_idx, rules in groupby(
+                    rules_to_apply_per_process[process_id], key=lambda entry: entry[0]
+                )
             ]
             if requests:
                 # Send one message so the worker finishes reading before replying; otherwise both
@@ -258,28 +271,111 @@ class RuleApplicationServer:
             send_tasks_to_process(process_id)
 
         # shape: `[batch_size, num_rules_to_apply, num_results]`
-        batch_results: list[list[list[RewriteResult]]] = []
-        for input_idx, input in enumerate(inputs):
-            results: list[list[RewriteResult]] = [[] for _ in rule_ids_to_apply[input_idx]]
+        batch_results: list[list[list[RewriteResult]]] = [
+            [[] for _ in rule_ids] for rule_ids in rule_ids_to_apply
+        ]
+        with ExitStack() as stack:
+            # Windows pipes/process handles need multiprocessing's wait implementation.
+            selector = stack.enter_context(selectors.DefaultSelector()) if os.name != "nt" else None
+            handles: dict[Any, tuple[int, Connection]] = {}
+            last_progress: dict[int, float] = {}
+
+            def register(process_id: int) -> None:
+                if not rules_to_apply_per_process[process_id]:
+                    return
+                connection = self._connections[process_id]
+                for handle in (connection, self._processes[process_id].sentinel):
+                    handles[handle] = (process_id, connection)
+                    if selector is not None:
+                        selector.register(handle, selectors.EVENT_READ, (process_id, connection))
+                last_progress[process_id] = monotonic()
+
+            def unregister(process_id: int) -> None:
+                for handle in (
+                    self._connections[process_id],
+                    self._processes[process_id].sentinel,
+                ):
+                    del handles[handle]
+                    if selector is not None:
+                        selector.unregister(handle)
+                del last_progress[process_id]
+
+            def restart(process_id: int, timed_out: bool) -> None:
+                paused = monotonic()
+                input_idx, _, rule_id = rules_to_apply_per_process[process_id].popleft()
+                if timed_out:
+                    logger.warning(
+                        f"Timed out waiting for process {process_id} for {timeout} seconds "
+                        f"(input: {inputs[input_idx].smiles}, rule ID: {rule_id})"
+                    )
+                else:
+                    logger.warning(
+                        f"Process {process_id} failed while applying rule ID {rule_id} "
+                        f"(input: {inputs[input_idx].smiles})"
+                    )
+                unregister(process_id)
+                self._restart_process(process_id)
+                send_tasks_to_process(process_id)
+                register(process_id)
+                # Healthy workers cannot be drained while a failed worker reloads its rulebase.
+                elapsed = monotonic() - paused
+                for peer in last_progress:
+                    if peer != process_id:
+                        last_progress[peer] += elapsed
 
             for process_id in range(self._num_processes):
-                while rules_to_apply_per_process[input_idx][process_id]:
-                    idx, rule_id = rules_to_apply_per_process[input_idx][process_id].popleft()
+                register(process_id)
 
-                    if self._connections[process_id].poll(timeout):
-                        results[idx] = self._connections[process_id].recv()
+            while handles:
+                wait_time = (
+                    None
+                    if timeout is None
+                    else max(0.0, min(last_progress.values()) + timeout - monotonic())
+                )
+                ready: list[tuple[Any, tuple[int, Connection]]]
+                if selector is None:
+                    ready = [
+                        (handle, handles[handle]) for handle in wait(handles, timeout=wait_time)
+                    ]
+                else:
+                    ready = [(key.fileobj, key.data) for key, _ in selector.select(wait_time)]
+                handled = set()
+                for handle, (process_id, connection) in ready:
+                    if (
+                        not rules_to_apply_per_process[process_id]
+                        or self._connections[process_id] is not connection
+                    ):
+                        continue
+                    handled.add(process_id)
+                    try:
+                        if handle is not connection:
+                            # Drain buffered replies before treating a worker exit as a failure.
+                            if connection.poll(0):
+                                continue
+                            raise EOFError("Worker exited")
+                        result = connection.recv()
+                    except (EOFError, OSError):
+                        restart(process_id, timed_out=False)
+                        continue
+                    input_idx, idx, _ = rules_to_apply_per_process[process_id].popleft()
+                    batch_results[input_idx][idx] = result
+                    if rules_to_apply_per_process[process_id]:
+                        last_progress[process_id] = monotonic()
                     else:
-                        logger.warning(
-                            f"Timed out waiting for process {process_id} for {timeout} seconds "
-                            f"(input: {input.smiles}, rule ID: {rule_id})"
-                        )
-
-                        self._restart_process(process_id)
-
-                        # Send the remaining tasks to the restarted process (note that completed
-                        # tasks were already popped from `rules_to_apply_per_process`).
-                        send_tasks_to_process(process_id)
-
-            batch_results.append(results)
+                        unregister(process_id)
+                if timeout is not None:
+                    for process_id in list(last_progress):
+                        if (
+                            process_id not in handled
+                            and monotonic() - last_progress[process_id] >= timeout
+                        ):
+                            # A reply may have arrived while another worker's result was decoded.
+                            try:
+                                if self._connections[process_id].poll(0):
+                                    continue
+                            except (EOFError, OSError):
+                                restart(process_id, timed_out=False)
+                                continue
+                            restart(process_id, timed_out=True)
 
         return batch_results

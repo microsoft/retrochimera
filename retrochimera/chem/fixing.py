@@ -15,6 +15,8 @@ lg.setLevel(RDLogger.CRITICAL)
 
 logger = get_logger(__name__)
 
+_AROMATIC_N_QUERY = Chem.MolFromSmarts("[n]")
+
 
 def reverse_rxn(smi):
     r, a, p = smi.split(">")
@@ -130,11 +132,15 @@ def fix_mol(mol: Chem.Mol) -> Optional[str]:
     """
     try:
         mol.UpdatePropertyCache(False)
-        cp = Chem.Mol(mol.ToBinary())
+        cp = Chem.Mol(mol)
         Chem.SanitizeMol(cp)
         mol = cp
         return Chem.MolToSmiles(mol)
+    except (Chem.AtomValenceException, Chem.AtomKekulizeException):
+        return None
     except ValueError:
+        if not mol.HasSubstructMatch(_AROMATIC_N_QUERY):
+            return None
         mol_adjusted = adjust_aromatic_Ns(mol)
         if mol_adjusted is None:
             return None

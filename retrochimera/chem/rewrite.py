@@ -1,16 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import cached_property, lru_cache
 from typing import Any, Optional, cast
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from syntheseus.interface.bag import Bag
 from syntheseus.interface.molecule import Molecule
-from syntheseus.reaction_prediction.chem.utils import (
-    molecule_bag_from_smiles,
-    remove_atom_mapping_from_mol,
-)
+from syntheseus.reaction_prediction.chem.utils import remove_atom_mapping_from_mol
 
 from retrochimera.chem.fixing import fix_mol
 from retrochimera.chem.utils import (
@@ -18,6 +16,27 @@ from retrochimera.chem.utils import (
     map_removed_lhs_atoms_to_dummies,
     normalize_atom_mapping,
 )
+
+
+@lru_cache(maxsize=8192)
+def _cached_component(smiles: str) -> Optional[Molecule]:
+    try:
+        return Molecule(smiles)
+    except ValueError:
+        return None
+
+
+def _molecule_bag_from_smiles(smiles: str) -> Optional[Bag[Molecule]]:
+    molecules = []
+    for component in smiles.split("."):
+        parsed = _cached_component(component)
+        if parsed is None:
+            return None
+        # Never expose cached graphs or metadata to callers.
+        molecule = Molecule(parsed.smiles, canonicalize=False, make_rdkit_mol=False)
+        molecule.metadata["rdkit_mol"] = Chem.Mol(parsed.rdkit_mol)
+        molecules.append(molecule)
+    return Bag(molecules)
 
 
 @dataclass
@@ -95,11 +114,45 @@ class Rewrite:
         memo[id(self)] = self
         return self
 
+    @cached_property
+    def _localization_plan(self) -> tuple[tuple[int, int, int], ...]:
+        return tuple(
+            (atom.GetIdx(), atom.GetAtomMapNum(), self.mapping[atom.GetAtomMapNum() - 1][0])
+            for atom in self.rdkit_reaction.GetProductTemplate(0).GetAtoms()
+            if atom.HasProp("molAtomMapNumber")
+        )
+
+    def _extract_localization(self, mol: Chem.Mol) -> tuple[list[int], list[int]]:
+        localization: list[Optional[int]] = [None] * self.rdkit_lhs_mol.GetNumAtoms()
+        removed = []
+        try:
+            for rhs_idx, map_num, lhs_idx in self._localization_plan:
+                atom = mol.GetAtomWithIdx(rhs_idx)
+                if atom.GetIntProp("old_mapno") != map_num:
+                    raise KeyError("Unexpected product atom order")
+                localization[lhs_idx] = atom.GetIntProp("react_atom_idx")
+                if map_num > self._max_non_dummy_atom_mapping_num:
+                    removed.append(rhs_idx)
+        except (KeyError, RuntimeError):
+            # Fall back to provenance scanning if RDKit changes the product atom order.
+            localization = [None] * self.rdkit_lhs_mol.GetNumAtoms()
+            removed = []
+            for atom in mol.GetAtoms():
+                if atom.HasProp("old_mapno"):
+                    map_num = atom.GetIntProp("old_mapno")
+                    localization[self.mapping[map_num - 1][0]] = atom.GetIntProp("react_atom_idx")
+                    if map_num > self._max_non_dummy_atom_mapping_num:
+                        removed.append(atom.GetIdx())
+        assert None not in localization
+        return cast(list[int], localization), removed
+
     def apply(
         self, input: Molecule, fix_result: bool = True, return_localization: bool = True
     ) -> list[RewriteResult]:
         results: list[RewriteResult] = []
         result_to_index: dict[Bag[Molecule], int] = {}
+        smiles_to_index: dict[str, Optional[int]] = {}
+        has_dummies = self._max_non_dummy_atom_mapping_num < len(self.mapping)
 
         for raw_result in self.rdkit_reaction.RunReactants((input.rdkit_mol,)):
             # Make sure the result is a single molecule (should hold due to the asserts above).
@@ -109,22 +162,8 @@ class Rewrite:
             localization: Optional[list[int]] = None
             atom_ids_to_remove: list[int] = []
 
-            if return_localization:
-                localization_tmp = [None] * self.rdkit_lhs_mol.GetNumAtoms()
-
-                for atom in result_rdkit_mol.GetAtoms():
-                    atom_props = atom.GetPropsAsDict()
-
-                    if "old_mapno" in atom_props:
-                        atom_mapping_idx = atom_props["old_mapno"]
-                        atom_idx = self.mapping[atom_mapping_idx - 1][0]
-                        localization_tmp[atom_idx] = atom_props["react_atom_idx"]
-
-                        if atom_mapping_idx > self._max_non_dummy_atom_mapping_num:
-                            atom_ids_to_remove.append(atom.GetIdx())
-
-                assert None not in localization_tmp
-                localization = cast(list[int], localization_tmp)
+            if return_localization and has_dummies:
+                localization, atom_ids_to_remove = self._extract_localization(result_rdkit_mol)
 
             if atom_ids_to_remove:
                 # Remove dummy atoms that we may have added in `map_removed_lhs_atoms_to_dummies`;
@@ -141,24 +180,26 @@ class Rewrite:
                 except Exception:
                     smiles = None
 
-            if smiles is not None:
-                mols = molecule_bag_from_smiles(smiles)
+            if smiles is None:
+                continue
+            if smiles not in smiles_to_index:
+                mols = _molecule_bag_from_smiles(smiles)
+                index = None
                 if mols is not None:
                     index = result_to_index.get(mols)
-                    if index is not None:
-                        if return_localization:
-                            current_localizations = results[index].metadata["localizations"]
-                            assert localization is not None
-
-                            current_localizations.append(localization)
-                    else:
-                        result_to_index[mols] = len(results)
-
-                        if localization is not None:
-                            metadata = {"localizations": [localization]}
-                        else:
-                            metadata = {}
-
+                    if index is None:
+                        index = len(results)
+                        result_to_index[mols] = index
+                        metadata: dict[str, Any] = (
+                            {"localizations": []} if return_localization else {}
+                        )
                         results.append(RewriteResult(mols=mols, metadata=metadata))
+                smiles_to_index[smiles] = index
+            index = smiles_to_index[smiles]
+            if index is not None and return_localization:
+                # Defer provenance work until the outcome has survived fixing and parsing.
+                if localization is None:
+                    localization, _ = self._extract_localization(result_rdkit_mol)
+                results[index].metadata["localizations"].append(localization)
 
         return results

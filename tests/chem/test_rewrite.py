@@ -2,7 +2,32 @@ import pytest
 from rdkit import Chem
 from syntheseus.interface.molecule import Molecule
 
-from retrochimera.chem.rewrite import Rewrite
+from retrochimera.chem.rewrite import Rewrite, _molecule_bag_from_smiles
+
+
+def test_cached_components_do_not_share_mutable_graphs_or_metadata() -> None:
+    smiles = "C(O)[C@H](F)Cl"
+    expected = Molecule(smiles)
+    first = _molecule_bag_from_smiles(smiles)
+    assert first is not None
+    [original] = first
+    original.metadata["probe"] = True
+    original.rdkit_mol.GetAtomWithIdx(0).SetIsotope(13)
+    for _ in range(2):
+        fresh = _molecule_bag_from_smiles(smiles)
+        assert fresh is not None
+        [other] = fresh
+        assert other == expected
+        assert other.rdkit_mol.ToBinary() == expected.rdkit_mol.ToBinary()
+        assert "probe" not in other.metadata
+
+
+@pytest.mark.parametrize("return_localization", [True, False])
+def test_rewrite_removes_deleted_atoms_only_when_localizing(return_localization: bool) -> None:
+    rewrite = Rewrite.from_rdkit("[C:1]-[Cl:2]>>[C:1]")
+    [result] = rewrite.apply(Molecule("CCCl"), return_localization=return_localization)
+    assert [mol.smiles for mol in result.mols] == (["CC"] if return_localization else ["CC", "Cl"])
+    assert result.metadata == ({"localizations": [[1, 2]]} if return_localization else {})
 
 
 @pytest.mark.parametrize(

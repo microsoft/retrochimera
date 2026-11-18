@@ -1,17 +1,51 @@
 import gc
+import os
 import random
 import signal
 import tempfile
 import time
-from multiprocessing import Event, Pipe, Process, active_children
+from multiprocessing import Event, Pipe, Process, Value, active_children, get_start_method
 
 import pytest
+from syntheseus import Molecule
 from syntheseus.reaction_prediction.data.reaction_sample import ReactionSample
 from syntheseus.reaction_prediction.utils.misc import set_random_seed
 
+import retrochimera.chem.rule_application_server as server_module
 from retrochimera.chem.rule_application_server import RuleApplicationServer
-from retrochimera.chem.rules import get_products
+from retrochimera.chem.rules import RuleBase, get_products
 from retrochimera.data.dataset import DataFold, ReactionDataset
+
+
+@pytest.mark.skipif(get_start_method() != "fork", reason="Injects a worker failure using fork")
+@pytest.mark.parametrize("failure", ["exit", "hang"])
+def test_worker_failure_preserves_completed_and_remaining_results(monkeypatch, tmp_path, failure):
+    original = server_module.get_products
+    calls = Value("i", 0)
+
+    def fail_second_application(*args, **kwargs):
+        calls.value += 1
+        if calls.value == 2:
+            if failure == "exit":
+                os._exit(7)
+            Event().wait()
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(server_module, "get_products", fail_second_application)
+    rulebase = RuleBase()
+    rulebase.add_rule("[C:1]>>[C:1]O", rule_id=0)
+    inputs = [Molecule("CC"), Molecule("CCC")]
+    expected = [original(mol, rule=rulebase[0].rxn) for mol in inputs]
+    rulebase.save_to_file(dir=tmp_path)
+    server = RuleApplicationServer(rulebase_dir=tmp_path, num_processes=1)
+    try:
+        results = server.apply_rules(
+            inputs, [[0, 0], [0]], timeout=None if failure == "exit" else 0.2
+        )
+        assert results == [[expected[0], []], [expected[1]]]
+        assert server.apply_rules(inputs[:1], [[0]]) == [[expected[0]]]
+    finally:
+        server.close()
 
 
 @pytest.mark.parametrize("num_inputs", [1, 16])
