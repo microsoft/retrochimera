@@ -28,9 +28,9 @@ def _worker_process(
 
     with suppress_rdkit_outputs():
         while True:
-            request = connection.recv()
-            # Bound graph lifetimes to one batch, including on worker shutdown.
+            # Drop inherited or completed-batch graphs before waiting for work.
             _cached_component.cache_clear()
+            request = connection.recv()
 
             if request is None:
                 break
