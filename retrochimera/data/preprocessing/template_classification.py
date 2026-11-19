@@ -46,7 +46,7 @@ def preprocess_samples(
         (Molecule(smiles=sample.products_str), get_unique_template_id(sample)) for sample in samples
     )
 
-    rule_ids = RuleBase.load_rule_ids_from_file(dir=rulebase_dir)
+    rule_ids = set(RuleBase.load_rule_ids_from_file(dir=rulebase_dir))
 
     # Get rid of labels which are not in the `rulebase` (e.g. they were too rare).
     samples_processed = (sample for sample in samples_processed if sample[-1] in rule_ids)
