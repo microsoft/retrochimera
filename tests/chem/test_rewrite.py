@@ -2,24 +2,7 @@ import pytest
 from rdkit import Chem
 from syntheseus.interface.molecule import Molecule
 
-from retrochimera.chem.rewrite import Rewrite, _molecule_bag_from_smiles
-
-
-def test_cached_components_do_not_share_mutable_graphs_or_metadata() -> None:
-    smiles = "C(O)[C@H](F)Cl"
-    expected = Molecule(smiles)
-    first = _molecule_bag_from_smiles(smiles)
-    assert first is not None
-    [original] = first
-    original.metadata["probe"] = True
-    original.rdkit_mol.GetAtomWithIdx(0).SetIsotope(13)
-    for _ in range(2):
-        fresh = _molecule_bag_from_smiles(smiles)
-        assert fresh is not None
-        [other] = fresh
-        assert other == expected
-        assert other.rdkit_mol.ToBinary() == expected.rdkit_mol.ToBinary()
-        assert "probe" not in other.metadata
+from retrochimera.chem.rewrite import Rewrite
 
 
 @pytest.mark.parametrize("return_localization", [True, False])

@@ -10,7 +10,7 @@ from more_itertools import divide
 from syntheseus.interface.molecule import Molecule
 from syntheseus.reaction_prediction.utils.misc import cpu_count, suppress_rdkit_outputs
 
-from retrochimera.chem.rewrite import RewriteResult, _cached_component
+from retrochimera.chem.rewrite import RewriteResult
 from retrochimera.chem.rules import RuleBase, get_products
 from retrochimera.utils.logging import get_logger
 
@@ -28,8 +28,6 @@ def _worker_process(
 
     with suppress_rdkit_outputs():
         while True:
-            # Drop inherited or completed-batch graphs before waiting for work.
-            _cached_component.cache_clear()
             request = connection.recv()
 
             if request is None:

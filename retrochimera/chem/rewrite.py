@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from functools import cached_property, lru_cache
+from functools import cached_property
 from typing import Any, Optional, cast
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from syntheseus.interface.bag import Bag
 from syntheseus.interface.molecule import Molecule
-from syntheseus.reaction_prediction.chem.utils import remove_atom_mapping_from_mol
+from syntheseus.reaction_prediction.chem.utils import (
+    molecule_bag_from_smiles,
+    remove_atom_mapping_from_mol,
+)
 
 from retrochimera.chem.fixing import fix_mol
 from retrochimera.chem.utils import (
@@ -16,27 +19,6 @@ from retrochimera.chem.utils import (
     map_removed_lhs_atoms_to_dummies,
     normalize_atom_mapping,
 )
-
-
-@lru_cache(maxsize=8192)
-def _cached_component(smiles: str) -> Optional[Molecule]:
-    try:
-        return Molecule(smiles)
-    except ValueError:
-        return None
-
-
-def _molecule_bag_from_smiles(smiles: str) -> Optional[Bag[Molecule]]:
-    molecules = []
-    for component in smiles.split("."):
-        parsed = _cached_component(component)
-        if parsed is None:
-            return None
-        # Never expose cached graphs or metadata to callers.
-        molecule = Molecule(parsed.smiles, canonicalize=False, make_rdkit_mol=False)
-        molecule.metadata["rdkit_mol"] = Chem.Mol(parsed.rdkit_mol)
-        molecules.append(molecule)
-    return Bag(molecules)
 
 
 @dataclass
@@ -185,7 +167,7 @@ class Rewrite:
             # Identical products can come from different atom matches: reuse parsing,
             # but keep every localization for scoring below.
             if smiles not in smiles_to_index:
-                mols = _molecule_bag_from_smiles(smiles)
+                mols = molecule_bag_from_smiles(smiles, make_rdkit_mol=False)
                 index = None
                 if mols is not None:
                     index = result_to_index.get(mols)
