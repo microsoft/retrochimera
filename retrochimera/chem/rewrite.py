@@ -168,11 +168,12 @@ class Rewrite:
             # but keep every localization for scoring below.
             if smiles not in smiles_to_index:
                 # `fix_mol` already sanitized the molecule and produced canonical SMILES,
-                # except explicit `[H]` atoms require a SMILES round-trip to fold.
+                # except explicit/mapped H atoms require a SMILES round-trip to fold.
+                canonicalize = not fix_result or "[H]" in smiles or "[H:" in smiles
                 mols = molecule_bag_from_smiles(
                     smiles,
-                    canonicalize=(not fix_result or "[H]" in smiles),
-                    make_rdkit_mol=False,
+                    canonicalize=canonicalize,
+                    make_rdkit_mol=canonicalize,
                 )
                 index = None
                 if mols is not None:
