@@ -5,6 +5,24 @@ from syntheseus.interface.molecule import Molecule
 from retrochimera.chem.rewrite import Rewrite
 
 
+@pytest.mark.parametrize("return_localization", [True, False])
+def test_rewrite_removes_deleted_atoms_only_when_localizing(return_localization: bool) -> None:
+    rewrite = Rewrite.from_rdkit("[C:1]-[Cl:2]>>[C:1]")
+    [result] = rewrite.apply(Molecule("CCCl"), return_localization=return_localization)
+    assert [mol.smiles for mol in result.mols] == (["CC"] if return_localization else ["CC", "Cl"])
+    assert result.metadata == ({"localizations": [[1, 2]]} if return_localization else {})
+
+
+def test_rewrite_drops_stale_non_tetrahedral_stereo() -> None:
+    rewrite = Rewrite.from_rdkit("[Cl:1]>>[Cl:1]")
+    [result] = rewrite.apply(Molecule("F[Pt@SP1](Cl)(Br)I"))
+    [product] = result.mols
+    assert all(
+        not atom.HasProp("_chiralPermutation") or atom.GetIntProp("_chiralPermutation") == 0
+        for atom in product.rdkit_mol.GetAtoms()
+    )
+
+
 @pytest.mark.parametrize(
     "template, num_mapped",
     [
