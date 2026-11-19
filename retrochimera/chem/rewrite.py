@@ -167,7 +167,13 @@ class Rewrite:
             # Identical products can come from different atom matches: reuse parsing,
             # but keep every localization for scoring below.
             if smiles not in smiles_to_index:
-                mols = molecule_bag_from_smiles(smiles, make_rdkit_mol=False)
+                # `fix_mol` already sanitized the molecule and produced canonical SMILES,
+                # except explicit `[H]` atoms require a SMILES round-trip to fold.
+                mols = molecule_bag_from_smiles(
+                    smiles,
+                    canonicalize=(not fix_result or "[H]" in smiles),
+                    make_rdkit_mol=False,
+                )
                 index = None
                 if mols is not None:
                     index = result_to_index.get(mols)
