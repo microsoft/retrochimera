@@ -48,10 +48,7 @@ class EvalEnsemblesConfig:
 
 
 def make_mol(smiles: str) -> Molecule:
-    try:
-        return Molecule(smiles, make_rdkit_mol=False)
-    except Exception:
-        return Molecule(smiles, canonicalize=False, make_rdkit_mol=False)
+    return Molecule(smiles, canonicalize=False, make_rdkit_mol=False)
 
 
 def load_ground_truths(
@@ -403,7 +400,9 @@ def run_from_config(config: EvalEnsemblesConfig) -> None:
             )
 
             # Verify that we get the same accuracies as what was reported.
-            assert np.allclose(individual_results, model_to_fold_to_top_k[model][fold])
+            assert np.allclose(individual_results, model_to_fold_to_top_k[model][fold]), (
+                f"Recomputed top-k accuracy differs from the saved stats for {model} ({fold.name})"
+            )
 
     models_public = []
     models_private = []
