@@ -50,6 +50,11 @@ For installation, there are two additional dependency groups: `dev` for running 
 
 If you want to train your own checkpoint, please follow the instructions in [`retrochimera/README.md`](retrochimera/README.md).
 
+### Inference performance
+
+For an opt-in fast profile, canonicalization tuning, and benchmark conditions, see the
+[inference performance guide](docs/inference-performance.md).
+
 ## Checkpoints for RetroChimera 1
 
 The main (and most powerful) checkpoint we release is trained on [Pistachio](https://figshare.com/ndownloader/files/59468882).

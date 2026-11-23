@@ -1,0 +1,16 @@
+# Model settings for the full Pistachio ensemble; see ../inference-performance.md.
+# Runtime policy, batch size, and result count are configured by the caller.
+model_class: RetroChimera
+model_kwargs:
+  call_submodels_in_parallel: true
+  smiles_transformer:
+    inference_precision: float16
+    beam_size: 20
+    augmentation_size: 10
+    filter_duplicate_augmentations: true
+    canonicalization_processes: 16
+    canonicalization_chunksize: 8
+    use_cache: false
+  template_localization:
+    num_processes: 16
+    use_cache: false
