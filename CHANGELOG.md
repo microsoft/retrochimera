@@ -20,6 +20,7 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - Improve performance of template model eval ([#63](https://github.com/microsoft/retrochimera/pull/63)) ([@lgeiger])
 - Accelerate template application ([#68](https://github.com/microsoft/retrochimera/pull/68)) ([@jla-gardner])
 - Load ensemble optimization data in parallel ([#70](https://github.com/microsoft/retrochimera/pull/70)) ([@lgeiger])
+- Do not re-canonicalise saved SMILES when computing ensemble ([#71](https://github.com/microsoft/retrochimera/pull/71)) ([@lgeiger])
 
 ### Added
 
