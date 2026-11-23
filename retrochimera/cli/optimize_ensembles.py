@@ -21,7 +21,7 @@ from syntheseus.reaction_prediction.data.dataset import DataFold, DiskReactionDa
 from syntheseus.reaction_prediction.data.reaction_sample import ReactionSample
 from syntheseus.reaction_prediction.utils.config import get_config as cli_get_config
 from syntheseus.reaction_prediction.utils.metrics import TopKMetricsAccumulator
-from syntheseus.reaction_prediction.utils.misc import set_random_seed
+from syntheseus.reaction_prediction.utils.misc import cpu_count, set_random_seed
 
 from retrochimera.inference.retrochimera import combine_results
 from retrochimera.utils.logging import get_logger
@@ -37,6 +37,7 @@ class EvalEnsemblesConfig:
     output_dir: str = MISSING  # Directory to use for saving the result
     dataset: str = "uspto"  # Dataset name used to look up "eval_results_{dataset}" subdirectories
     num_repeats: int = 5  # Number of repeats of the weight optimization process to be averaged out
+    num_processes: int = min(cpu_count(), 8)  # Number of parallel processes to use
 
     # Options below are for saving ensemble checkpoints, which are constructed by copying original
     # model checkpoints and saving them in a separate subdirectory together with a `models.json`
@@ -54,10 +55,10 @@ def make_mol(smiles: str) -> Molecule:
 
 
 def load_ground_truths(
-    data_dir: str, folds: list[DataFold]
+    data_dir: str, folds: list[DataFold], *, num_processes: int = 0
 ) -> dict[DataFold, list[tuple[Bag[Molecule], Bag[Molecule]]]]:
     """Load ground truth outputs for all reactions in the dataset in order."""
-    dataset = DiskReactionDataset(data_dir, sample_cls=ReactionSample)
+    dataset = DiskReactionDataset(data_dir, sample_cls=ReactionSample, num_processes=num_processes)
     return {fold: [(r.products, r.reactants) for r in dataset[fold]] for fold in folds}
 
 
@@ -256,7 +257,9 @@ def run_from_config(config: EvalEnsemblesConfig) -> None:
 
     logger.info(f"Loading dataset ground truths from {config.data_dir}")
     all_ground_truths = load_ground_truths(
-        data_dir=config.data_dir, folds=[DataFold.VALIDATION, DataFold.TEST]
+        data_dir=config.data_dir,
+        folds=[DataFold.VALIDATION, DataFold.TEST],
+        num_processes=config.num_processes,
     )
     ground_truths = {
         fold: [reactants for _, reactants in samples] for fold, samples in all_ground_truths.items()

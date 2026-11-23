@@ -19,6 +19,7 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - Prevent logging failure when `Chem.MolToSmiles` fails ([#59](https://github.com/microsoft/retrochimera/pull/59)) ([@lgeiger])
 - Improve performance of template model eval ([#63](https://github.com/microsoft/retrochimera/pull/63)) ([@lgeiger])
 - Accelerate template application ([#68](https://github.com/microsoft/retrochimera/pull/68)) ([@jla-gardner])
+- Load ensemble optimization data in parallel ([#70](https://github.com/microsoft/retrochimera/pull/70)) ([@lgeiger])
 
 ### Added
 
