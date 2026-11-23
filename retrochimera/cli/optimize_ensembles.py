@@ -47,13 +47,6 @@ class EvalEnsemblesConfig:
     shorten_model_names: bool = True  # Whether to shorten model names when constructing checkpoints
 
 
-def make_mol(smiles: str) -> Molecule:
-    try:
-        return Molecule(smiles, make_rdkit_mol=False)
-    except Exception:
-        return Molecule(smiles, canonicalize=False, make_rdkit_mol=False)
-
-
 def load_ground_truths(
     data_dir: str, folds: list[DataFold], *, num_processes: int = 0
 ) -> dict[DataFold, list[tuple[Bag[Molecule], Bag[Molecule]]]]:
@@ -73,7 +66,7 @@ def load_predicted_reactants(
             input_smiles = predictions.get("input")
             if input_smiles is not None:
                 expected = ground_truth_products[offset + i]
-                actual = Bag([make_mol(input_smiles)])
+                actual = Bag([Molecule(input_smiles, canonicalize=False, make_rdkit_mol=False)])
                 assert actual == expected, (
                     f"Prediction {offset + i}: input '{input_smiles}' does not match "
                     f"expected product '{expected}'"
@@ -83,7 +76,10 @@ def load_predicted_reactants(
 
         raw_reactants.append(  # Handle older output format.
             [
-                [make_mol(r["smiles"]) for r in p.get("reactants", p.get("output"))]
+                [
+                    Molecule(r["smiles"], canonicalize=False, make_rdkit_mol=False)
+                    for r in p.get("reactants", p.get("output"))
+                ]
                 for p in predictions
             ]
         )
@@ -403,7 +399,9 @@ def run_from_config(config: EvalEnsemblesConfig) -> None:
             )
 
             # Verify that we get the same accuracies as what was reported.
-            assert np.allclose(individual_results, model_to_fold_to_top_k[model][fold])
+            assert np.allclose(individual_results, model_to_fold_to_top_k[model][fold]), (
+                f"Recomputed top-k accuracy differs from the saved stats for {model} ({fold.name})"
+            )
 
     models_public = []
     models_private = []
