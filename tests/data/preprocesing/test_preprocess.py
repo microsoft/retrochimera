@@ -5,7 +5,9 @@ from typing import Generator
 
 import numpy as np
 import pytest
+from syntheseus import Molecule
 
+from retrochimera.chem.rewrite import Rewrite
 from retrochimera.data.dataset import DataFold, ReactionDataset
 from retrochimera.data.preprocessing import template_classification, template_localization
 from retrochimera.data.processed_dataset import ProcessedDataModule
@@ -15,6 +17,18 @@ from retrochimera.encoders.configs import GNNEncoderConfig
 from retrochimera.encoders.featurizers import DGLLifeRewriteFeaturizer
 from retrochimera.encoders.gnn import GNNEncoder
 from retrochimera.utils.training import preprocess_and_save
+
+
+def test_preprocessing_skips_localization_targets_for_synthetic_hydrogens() -> None:
+    product = Molecule("CCO")
+    [result] = Rewrite.from_rdkit(
+        "([C:1](-[#1&^0:2])-[O:3]-[#1&^0:4])>>([C:1]=[O:3].[#1:2]-[#1:4])"
+    ).apply(product)
+    sample = template_localization._process_sample(
+        (product, result.mols, 0, [result]),
+        input_preprocess_fn=lambda _: pytest.fail("Incomplete targets must be skipped"),
+    )
+    assert sample is None
 
 
 def run_preprocessing_with_dummy_model(model, dataset: ReactionDataset):

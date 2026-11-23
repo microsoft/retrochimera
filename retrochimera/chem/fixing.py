@@ -4,6 +4,7 @@ Code was adapted from RDKit cookbook:
 https://rdkit.readthedocs.io/en/latest/Cookbook.html#cleaning-up-heterocycles
 """
 
+from collections import Counter
 from typing import Optional
 
 from rdkit import Chem, RDLogger
@@ -154,3 +155,19 @@ def fix_mol(mol: Chem.Mol) -> Optional[str]:
             return Chem.MolToSmiles(mol_adjusted)
         except ValueError:
             return None
+
+
+def restore_counterions(smiles: str, product: Chem.Mol) -> str:
+    if Chem.GetFormalCharge(product) != 0:
+        return smiles
+    precursor = Chem.MolFromSmiles(smiles)
+    if precursor is None or Chem.GetFormalCharge(precursor) <= 0:
+        return smiles
+    missing = Counter(
+        Chem.MolToSmiles(fragment)
+        for fragment in Chem.GetMolFrags(product, asMols=True)
+        if Chem.GetFormalCharge(fragment) < 0
+        and all(a.GetAtomicNum() != 6 for a in fragment.GetAtoms())
+    ) - Counter(Chem.MolToSmiles(fragment) for fragment in Chem.GetMolFrags(precursor, asMols=True))
+    restored = ".".join([smiles, *missing.elements()])
+    return restored if Chem.GetFormalCharge(Chem.MolFromSmiles(restored)) == 0 else smiles

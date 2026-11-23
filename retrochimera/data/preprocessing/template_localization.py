@@ -44,7 +44,11 @@ def _process_sample(
     assert len(results) == 1
 
     [result] = results
-    localizations = result.metadata["localizations"]
+    # Added H atoms have no encoder atom index (None). Training requires a real index
+    # for every template atom, so discard these matches and skip samples with none left.
+    localizations = [loc for loc in result.metadata["localizations"] if None not in loc]
+    if not localizations:
+        return None
 
     loc_target = np.zeros((len(localizations[0]), input.rdkit_mol.GetNumAtoms()), dtype=np.float32)
     for localization in localizations:

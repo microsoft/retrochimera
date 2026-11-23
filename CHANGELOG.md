@@ -30,6 +30,7 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Fixed
 
+- Apply explicit-hydrogen templates to implicit-hydrogen inputs without changing encoder graphs, and restore missing charge-balancing inorganic product counterions ([@jla-gardner])
 - Avoid deadlocks in `RuleApplicationServer` ([#65](https://github.com/microsoft/retrochimera/pull/65)) ([@lgeiger])
 
 ## [1.3.0] - 2026-09-21

@@ -1,8 +1,63 @@
+from typing import Optional
+
 import pytest
 from rdkit import Chem
 from syntheseus.interface.molecule import Molecule
+from syntheseus.reaction_prediction.chem.utils import molecule_bag_from_smiles
 
 from retrochimera.chem.rewrite import Rewrite
+
+
+@pytest.mark.parametrize("return_localization", [True, False])
+@pytest.mark.parametrize(
+    "product,expected",
+    [
+        ("CCO", "CC=O"),
+        ("[2H][C@H](F)CCO", "[2H][C@H](F)CC=O"),
+        ("OCCO", "O=CCO"),
+        ("COC", None),
+    ],
+)
+def test_rewrite_implicit_hydrogens(
+    product: str, expected: Optional[str], return_localization: bool
+) -> None:
+    target = Molecule(product)
+    original = Chem.MolToSmiles(target.rdkit_mol)
+    rule = Rewrite.from_rdkit("([C:1](-[#1&^0:2])-[O:3])>>([C:1]=[O:3].[#1:2]-[#1])")
+    results = rule.apply(target, return_localization=return_localization)
+    assert Chem.MolToSmiles(target.rdkit_mol) == original
+    assert [r.mols for r in results] == (
+        [molecule_bag_from_smiles(expected + ".[H][H]")] if expected else []
+    )
+    for result in results:
+        assert bool(result.metadata) == return_localization
+        if return_localization and product == "OCCO":
+            assert {loc[0] for loc in result.metadata["localizations"]} == {1, 2}
+        for localization in result.metadata.get("localizations", []):
+            assert None in localization
+            assert [a.GetAtomicNum() for a in rule.rdkit_lhs_mol.GetAtoms()] == [
+                target.rdkit_mol.GetAtomWithIdx(i).GetAtomicNum() if i is not None else 1
+                for i in localization
+            ]
+
+
+@pytest.mark.parametrize(
+    "template,product,expected",
+    [
+        ("[N+:1]>>[N+:1]", "CC[NH3+].[Br-]", "CC[NH3+].[Br-]"),
+        ("([N+:1].[Br-:2])>>([N+:1].[Br-:2])", "CC[NH3+].[Br-]", "CC[NH3+].[Br-]"),
+        ("[Ca+2:1]>>[Ca+2:1]", "[Ca+2].[Cl-].[Cl-]", "[Ca+2].[Cl-].[Cl-]"),
+        ("[N&H3+:1]>>[N&H2&+0:1]", "CC[NH3+].[Br-]", "CCN"),
+        ("[N+:1]>>[N+:1]", "CC[NH3+].CC(=O)[O-]", "CC[NH3+]"),
+        ("[N+:1]>>[N+:1]", "CC[NH3+].[Br-].[Br-]", "CC[NH3+]"),
+        ("[N+:1]>>[N+:1]", "CC[NH3+].CC[NH3+].[Br-].[Br-]", "CC[NH3+]"),
+    ],
+)
+def test_rewrite_restores_only_missing_charge_balancing_inorganic_counterions(
+    template: str, product: str, expected: str
+) -> None:
+    [result] = Rewrite.from_rdkit(template).apply(Molecule(product))
+    assert result.mols == molecule_bag_from_smiles(expected)
 
 
 @pytest.mark.parametrize("return_localization", [True, False])

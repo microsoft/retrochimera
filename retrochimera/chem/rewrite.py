@@ -13,7 +13,8 @@ from syntheseus.reaction_prediction.chem.utils import (
     remove_atom_mapping_from_mol,
 )
 
-from retrochimera.chem.fixing import fix_mol
+from retrochimera.chem.explicit_hydrogen import hydrogen_inputs
+from retrochimera.chem.fixing import fix_mol, restore_counterions
 from retrochimera.chem.utils import (
     get_atom_mapping,
     map_removed_lhs_atoms_to_dummies,
@@ -128,6 +129,14 @@ class Rewrite:
         assert None not in localization
         return cast(list[int], localization), removed
 
+    @cached_property
+    def _needs_hydrogens(self) -> bool:
+        # does this rewrite require explicit hydrogens on the input molecule?
+        return any(
+            atom.GetAtomicNum() == 1 and atom.GetIsotope() == 0
+            for atom in self.rdkit_lhs_mol.GetAtoms()
+        )
+
     def apply(
         self, input: Molecule, fix_result: bool = True, return_localization: bool = True
     ) -> list[RewriteResult]:
@@ -136,7 +145,17 @@ class Rewrite:
         smiles_to_index: dict[str, Optional[int]] = {}
         has_dummies = self._max_non_dummy_atom_mapping_num < len(self.mapping)
 
-        for raw_result in self.rdkit_reaction.RunReactants((input.rdkit_mol,)):
+        inputs = (
+            hydrogen_inputs(input.rdkit_mol, self.rdkit_lhs_mol)
+            if self._needs_hydrogens
+            else [(input.rdkit_mol, None)]
+        )
+        outcomes = (
+            (result, indices)
+            for mol, indices in inputs
+            for result in self.rdkit_reaction.RunReactants((mol,))
+        )
+        for raw_result, source_indices in outcomes:
             # Make sure the result is a single molecule (should hold due to the asserts above).
             assert len(raw_result) == 1
             (result_rdkit_mol,) = raw_result
@@ -164,6 +183,11 @@ class Rewrite:
 
             if smiles is None:
                 continue
+
+            # make sure we carry through any spectator counterions from the input molecule
+            if "." in input.smiles:
+                smiles = restore_counterions(smiles, input.rdkit_mol)
+
             # Identical products can come from different atom matches: reuse parsing,
             # but keep every localization for scoring below.
             if smiles not in smiles_to_index:
@@ -191,6 +215,10 @@ class Rewrite:
                 # Defer provenance work until the outcome has survived fixing and parsing.
                 if localization is None:
                     localization, _ = self._extract_localization(result_rdkit_mol)
-                results[index].metadata["localizations"].append(localization)
+                results[index].metadata["localizations"].append(
+                    [source_indices[i] for i in localization]
+                    if source_indices is not None
+                    else localization
+                )
 
         return results
