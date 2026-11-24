@@ -67,6 +67,63 @@ def test_rewrite_implicit_hydrogens_in_atom_or_query(product: str) -> None:
     assert [result.mols for result in results] == [molecule_bag_from_smiles(product)]
 
 
+@pytest.mark.parametrize(
+    "template,product,expected",
+    [
+        (
+            "([C:1](-[#1&^0&z0:2])-[O:3])>>([C:1]=[O:3].[#1:2]-[#1])",
+            "CCO",
+            "CC=O.[H][H]",
+        ),
+        (
+            "([N:1](-[#1&^0&z1:2])-[#1&^0&z1:3])>>([N+:1](=O)-[O-].[#1:2]-[#1:3])",
+            "CN",
+            "C[N+](=O)[O-].[H][H]",
+        ),
+    ],
+)
+def test_rewrite_detects_hydrogens_with_neighbor_count_predicates(
+    template: str, product: str, expected: str
+) -> None:
+    [result] = Rewrite.from_rdkit(template).apply(Molecule(product))
+    assert result.mols == molecule_bag_from_smiles(expected)
+
+
+@pytest.mark.parametrize(
+    "template,product,mismatch,localizations",
+    [
+        ("[C;$([C](-[#1])-[#1]):1]>>[C:1]", "CC", "FC(F)(F)C(F)(F)F", [[0], [1]]),
+        ("[C;$([C]-[O]-[#1]):1]>>[C:1]", "CCO", "COC", [[1]]),
+        ("[C;$([C]-[O;$([O]-[#1])]):1]>>[C:1]", "CCO", "COC", [[1]]),
+        (
+            "([C;$([C]-[O]-[#1]):1]-[#1:2])>>([C:1]-[#1:2])",
+            "CO",
+            "COC",
+            [[0, None]],
+        ),
+    ],
+)
+def test_rewrite_matches_recursive_hydrogen_predicates(
+    template: str, product: str, mismatch: str, localizations: list[list[Optional[int]]]
+) -> None:
+    rule = Rewrite.from_rdkit(template)
+    target = Molecule(product)
+    [result] = rule.apply(target)
+    assert result.mols == molecule_bag_from_smiles(product)
+    assert result.metadata["localizations"] == localizations
+    assert not rule.apply(Molecule(mismatch))
+
+
+def test_rewrite_deduplicates_hydrogen_expanded_localizations() -> None:
+    rule = Rewrite.from_rdkit("([C:1]-[#1,#17:2])>>([C:1]-[*:2])")
+    target = Molecule("CCCl")
+    [result] = rule.apply(target)
+    localizations = result.metadata["localizations"]
+    assert len(localizations) == 3
+    assert len({tuple(localization) for localization in localizations}) == 3
+    assert localizations.count([1, 2]) == 1
+
+
 @pytest.mark.parametrize("return_localization", [True, False])
 @pytest.mark.parametrize(
     "template,product,expected",
@@ -152,6 +209,17 @@ def test_rewrite_does_not_copy_fragment_matched_through_synthetic_hydrogen(
     assert result.mols == molecule_bag_from_smiles(product)
     if return_localization:
         assert all(localization == [None] for localization in result.metadata["localizations"])
+
+
+def test_rewrite_can_include_unrestored_outcomes_for_training() -> None:
+    target = Molecule("C[NH3+].[Cl-]")
+    rule = Rewrite.from_rdkit("[N+:1]>>[N+:1]")
+    results = rule.apply(target, include_unrestored=True)
+    assert {result.mols for result in results} == {
+        molecule_bag_from_smiles("C[NH3+]"),
+        molecule_bag_from_smiles("C[NH3+].[Cl-]"),
+    }
+    assert all(result.metadata["localizations"] == [[1]] for result in results)
 
 
 @pytest.mark.parametrize(

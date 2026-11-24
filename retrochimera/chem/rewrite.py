@@ -59,6 +59,13 @@ class Rewrite:
         assert len(template.GetReactants()) == 1
         assert len(template.GetProducts()) == 1
 
+        if "$(" in template_smarts.split(">>", 1)[0]:
+            reactant = template.GetReactantTemplate(0)
+            # All top-level atoms are mapped now; only recursive H nodes can be merged.
+            merged = Chem.MergeQueryHs(reactant, mergeUnmappedOnly=True)
+            for atom, merged_atom in zip(reactant.GetAtoms(), merged.GetAtoms()):
+                atom.SetQuery(merged_atom)
+
         template_lhs_mol = Chem.Mol(template.GetReactantTemplate(0))
         template_rhs_mol = Chem.Mol(template.GetProductTemplate(0))
 
@@ -132,14 +139,23 @@ class Rewrite:
     @cached_property
     def _needs_hydrogens(self) -> bool:
         # does this rewrite require explicit hydrogens on the input molecule?
-        return Chem.HasQueryHs(self.rdkit_lhs_mol)[0]
+        return (
+            any(atom.GetAtomicNum() == 1 for atom in self.rdkit_lhs_mol.GetAtoms())
+            or (Chem.HasQueryHs(self.rdkit_lhs_mol)[0])
+        )
 
     def apply(
-        self, input: Molecule, fix_result: bool = True, return_localization: bool = True
+        self,
+        input: Molecule,
+        fix_result: bool = True,
+        return_localization: bool = True,
+        include_unrestored: bool = False,
     ) -> list[RewriteResult]:
+        """Apply the rewrite, optionally retaining pre-counterion outcomes for training."""
         results: list[RewriteResult] = []
         result_to_index: dict[Bag[Molecule], int] = {}
         smiles_to_index: dict[str, Optional[int]] = {}
+        seen_localizations: dict[int, set[tuple[Optional[int], ...]]] = {}
         has_dummies = self._max_non_dummy_atom_mapping_num < len(self.mapping)
 
         inputs = (
@@ -181,6 +197,7 @@ class Rewrite:
             if smiles is None:
                 continue
 
+            smiles_variants = [smiles]
             # make sure we carry through any spectator counterions from the input molecule
             if "." in input.smiles:
                 if localization is None:
@@ -195,41 +212,52 @@ class Rewrite:
                         for atom in result_rdkit_mol.GetAtoms()
                         if atom.HasProp("react_atom_idx")
                     )
-                smiles = restore_counterions(
+                restored = restore_counterions(
                     smiles, input.rdkit_mol, {i for i in matched_atoms if i is not None}
                 )
+                smiles_variants = (
+                    [restored, smiles] if include_unrestored and restored != smiles else [restored]
+                )
 
-            # Identical products can come from different atom matches: reuse parsing,
-            # but keep every localization for scoring below.
-            if smiles not in smiles_to_index:
-                # `fix_mol` already sanitized the molecule and produced canonical SMILES,
-                # except explicit/mapped H atoms require a SMILES round-trip to fold.
-                canonicalize = not fix_result or "[H]" in smiles or "[H:" in smiles
-                mols = molecule_bag_from_smiles(
-                    smiles,
-                    canonicalize=canonicalize,
-                    make_rdkit_mol=canonicalize,
-                )
-                index = None
-                if mols is not None:
-                    index = result_to_index.get(mols)
-                    if index is None:
-                        index = len(results)
-                        result_to_index[mols] = index
-                        metadata: dict[str, Any] = (
-                            {"localizations": []} if return_localization else {}
-                        )
-                        results.append(RewriteResult(mols=mols, metadata=metadata))
-                smiles_to_index[smiles] = index
-            index = smiles_to_index[smiles]
-            if index is not None and return_localization:
-                # Defer provenance work until the outcome has survived fixing and parsing.
-                if localization is None:
-                    localization, _ = self._extract_localization(result_rdkit_mol)
-                results[index].metadata["localizations"].append(
-                    [source_indices[i] for i in localization]
-                    if source_indices is not None
-                    else localization
-                )
+            for smiles in smiles_variants:
+                # Identical products can come from different atom matches: reuse parsing,
+                # but keep their distinct localizations for scoring below.
+                if smiles not in smiles_to_index:
+                    # `fix_mol` already sanitized the molecule and produced canonical SMILES,
+                    # except explicit/mapped H atoms require a SMILES round-trip to fold.
+                    canonicalize = not fix_result or "[H]" in smiles or "[H:" in smiles
+                    mols = molecule_bag_from_smiles(
+                        smiles,
+                        canonicalize=canonicalize,
+                        make_rdkit_mol=canonicalize,
+                    )
+                    index = None
+                    if mols is not None:
+                        index = result_to_index.get(mols)
+                        if index is None:
+                            index = len(results)
+                            result_to_index[mols] = index
+                            metadata: dict[str, Any] = (
+                                {"localizations": []} if return_localization else {}
+                            )
+                            results.append(RewriteResult(mols=mols, metadata=metadata))
+                    smiles_to_index[smiles] = index
+                index = smiles_to_index[smiles]
+                if index is not None and return_localization:
+                    # Defer provenance work until the outcome has survived fixing and parsing.
+                    if localization is None:
+                        localization, _ = self._extract_localization(result_rdkit_mol)
+                    mapped_localization: list[Optional[int]] = (
+                        [source_indices[i] for i in localization]
+                        if source_indices is not None
+                        else cast(list[Optional[int]], localization)
+                    )
+                    if source_indices is not None:
+                        key = tuple(mapped_localization)
+                        seen = seen_localizations.setdefault(index, set())
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                    results[index].metadata["localizations"].append(mapped_localization)
 
         return results
