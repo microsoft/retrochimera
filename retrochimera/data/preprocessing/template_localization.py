@@ -44,18 +44,17 @@ def _process_sample(
     assert len(results) == 1
 
     [result] = results
-    # Added H atoms have no encoder atom index (None). Training requires a real index
-    # for every template atom, so discard these matches and skip samples with none left.
-    localizations = [loc for loc in result.metadata["localizations"] if None not in loc]
+    localizations = result.metadata["localizations"]
     if not localizations:
         return None
 
     loc_target = np.zeros((len(localizations[0]), input.rdkit_mol.GetNumAtoms()), dtype=np.float32)
     for localization in localizations:
         for idx_rewrite, idx_input in enumerate(localization):
-            loc_target[idx_rewrite][idx_input] += 1.0
+            if idx_input is not None:
+                loc_target[idx_rewrite][idx_input] += 1.0
 
-    loc_target /= loc_target.sum(axis=1, keepdims=True)
+    loc_target /= np.maximum(loc_target.sum(axis=1, keepdims=True), 1.0)
 
     return input_preprocess_fn(input), target, loc_target
 

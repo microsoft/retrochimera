@@ -132,10 +132,7 @@ class Rewrite:
     @cached_property
     def _needs_hydrogens(self) -> bool:
         # does this rewrite require explicit hydrogens on the input molecule?
-        return any(
-            atom.GetAtomicNum() == 1 and atom.GetIsotope() == 0
-            for atom in self.rdkit_lhs_mol.GetAtoms()
-        )
+        return Chem.HasQueryHs(self.rdkit_lhs_mol)[0]
 
     def apply(
         self, input: Molecule, fix_result: bool = True, return_localization: bool = True
@@ -186,7 +183,16 @@ class Rewrite:
 
             # make sure we carry through any spectator counterions from the input molecule
             if "." in input.smiles:
-                smiles = restore_counterions(smiles, input.rdkit_mol)
+                if localization is None:
+                    localization, _ = self._extract_localization(result_rdkit_mol)
+                matched_atoms = (
+                    localization
+                    if source_indices is None
+                    else [source_indices[i] for i in localization]
+                )
+                smiles = restore_counterions(
+                    smiles, input.rdkit_mol, {i for i in matched_atoms if i is not None}
+                )
 
             # Identical products can come from different atom matches: reuse parsing,
             # but keep every localization for scoring below.

@@ -92,10 +92,26 @@ def test_rewrite_restores_charge_balancing_spectator_cation() -> None:
     assert result.mols == molecule_bag_from_smiles(product)
 
 
-def test_rewrite_restores_only_charge_balancing_subset_of_spectator_anions() -> None:
-    rule = Rewrite.from_rdkit("[N&H3+:1]>>[N&H2&+0:1]")
-    [result] = rule.apply(Molecule("[NH3+]CC[NH3+].[Cl-].[Cl-]"))
-    assert result.mols == molecule_bag_from_smiles("NCC[NH3+].[Cl-]")
+@pytest.mark.parametrize(
+    "template,product,expected",
+    [
+        (
+            "[N&H3+:1]>>[N&H2&+0:1]",
+            "[NH3+]CC[NH3+].[Cl-].[Cl-]",
+            "NCC[NH3+].[Cl-]",
+        ),
+        (
+            "[N&H2+:1]>>[N&H1&+0:1]",
+            "[NH3+]CC[NH2+]CC[NH3+].[Cl-].O=S(=O)([O-])[O-]",
+            "[NH3+]CCNCC[NH3+].O=S(=O)([O-])[O-]",
+        ),
+    ],
+)
+def test_rewrite_restores_only_charge_balancing_subset_of_spectator_anions(
+    template: str, product: str, expected: str
+) -> None:
+    [result] = Rewrite.from_rdkit(template).apply(Molecule(product))
+    assert result.mols == molecule_bag_from_smiles(expected)
 
 
 def test_rewrite_does_not_restore_counterion_deleted_by_template() -> None:

@@ -19,18 +19,6 @@ from retrochimera.encoders.gnn import GNNEncoder
 from retrochimera.utils.training import preprocess_and_save
 
 
-def test_preprocessing_skips_localization_targets_for_synthetic_hydrogens() -> None:
-    product = Molecule("CCO")
-    [result] = Rewrite.from_rdkit(
-        "([C:1](-[#1&^0:2])-[O:3]-[#1&^0:4])>>([C:1]=[O:3].[#1:2]-[#1:4])"
-    ).apply(product)
-    sample = template_localization._process_sample(
-        (product, result.mols, 0, [result]),
-        input_preprocess_fn=lambda _: pytest.fail("Incomplete targets must be skipped"),
-    )
-    assert sample is None
-
-
 def test_preprocessing_retains_classification_and_real_atom_targets_with_synthetic_hydrogens() -> (
     None
 ):

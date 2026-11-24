@@ -15,8 +15,15 @@ def hydrogen_inputs(
             atom.SetHybridization(Chem.HybridizationType.S)
     parameters = Chem.RemoveHsParameters()
     parameters.removeMapped = False
+    # Full hydrogenation changes degree and H-count predicates; check those after pruning.
+    relaxed_query = Chem.RWMol(query)
+    for atom in query.GetAtoms():
+        relaxed_query.ReplaceAtom(
+            atom.GetIdx(),
+            Chem.AtomFromSmarts(f"[#{atom.GetAtomicNum()}]" if atom.GetAtomicNum() else "*"),
+        )
     seen = set()
-    for match in expanded.GetSubstructMatches(query, useChirality=True):
+    for match in expanded.GetSubstructMatches(relaxed_query, maxMatches=0):
         # Equivalent H choices on one atom give the same graph, but distinct sites must survive.
         sites = tuple(
             sorted(
@@ -34,5 +41,7 @@ def hydrogen_inputs(
         graph = Chem.RemoveHs(graph, parameters)
         for atom in graph.GetAtoms():
             atom.SetAtomMapNum(0)
+        if not graph.HasSubstructMatch(query):
+            continue
         # Only appended H atoms were removed, so original input indices are unchanged.
         yield graph, list(range(size)) + [None] * (graph.GetNumAtoms() - size)
