@@ -167,13 +167,19 @@ def score_localization(result: RewriteResult) -> float:
     localization_scores = result.metadata["localization_scores"]
 
     total_logprob = 0.0
+    scored_atoms = 0
     for index_rewrite_lhs, indices_input_mol in enumerate(zip(*localizations)):
+        # Synthetic H has no encoder atom and contributes no localization score.
+        indices = {index for index in indices_input_mol if index is not None}
+        if not indices:
+            continue
+        scored_atoms += 1
         prob = 0.0
-        for index_input_mol in set(indices_input_mol):
+        for index_input_mol in indices:
             prob += math.exp(localization_scores[index_rewrite_lhs][index_input_mol])
 
         total_logprob += math.log(prob)
 
     # A sum of log probabilities is more mathematically correct, but an average empirically seems
     # to work a bit better, so we do the latter.
-    return total_logprob / len(localizations[0])
+    return (total_logprob / scored_atoms) if scored_atoms else 0.0

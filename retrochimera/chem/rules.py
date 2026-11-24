@@ -384,6 +384,7 @@ def get_products(
     rule: Rewrite,
     cutoff: float = 0.2,
     return_localization: bool = False,
+    include_unrestored: bool = False,
 ) -> list[RewriteResult]:
     """Applies the rule to the input molecule.
 
@@ -393,13 +394,17 @@ def get_products(
         cutoff: Only keep a result if its SMILES length is at least a `cutoff` fraction of the
             SMILES length of `mol`.
         return_localization: Whether to also extract the corresponding localization indices.
+        include_unrestored: Also return outcomes before spectator-ion restoration, for matching
+            training references which omit those ions.
 
     Returns:
         A set of possible outcomes for applying this rule to the input mol.
     """
 
     result_smiles_min_length = len(mol.smiles) * cutoff
-    results = rule.apply(mol, return_localization=return_localization)
+    results = rule.apply(
+        mol, return_localization=return_localization, include_unrestored=include_unrestored
+    )
 
     results_filtered = []
     for result in results:

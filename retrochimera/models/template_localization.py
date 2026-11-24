@@ -418,6 +418,10 @@ class TemplateLocalizationModel(AbstractModel[TemplateReactionSample, ProcessedS
             else:
                 graph_loc_targets_ext = graph_loc_targets
 
+            # Synthetic-H rows have no encoder target, including after label smoothing.
+            supervised_rows = graph_loc_targets_ext.sum(dim=-1) > 0
+            graph_loc_targets_ext = graph_loc_targets_ext[supervised_rows]
+            graph_dot_prods = graph_dot_prods[supervised_rows]
             graph_loc_targets_uniform = (
                 torch.ones_like(graph_loc_targets_ext) / graph_loc_targets_ext.shape[-1]
             )

@@ -154,3 +154,15 @@ def fix_mol(mol: Chem.Mol) -> Optional[str]:
             return Chem.MolToSmiles(mol_adjusted)
         except ValueError:
             return None
+
+
+def restore_counterions(smiles: str, product: Chem.Mol, matched_atoms: set[int]) -> str:
+    """Carry through every charged input fragment not involved in the template."""
+    spectators = [
+        Chem.MolToSmiles(fragment)
+        for fragment, indices in zip(
+            Chem.GetMolFrags(product, asMols=True), Chem.GetMolFrags(product)
+        )
+        if Chem.GetFormalCharge(fragment) and matched_atoms.isdisjoint(indices)
+    ]
+    return ".".join([smiles, *spectators])

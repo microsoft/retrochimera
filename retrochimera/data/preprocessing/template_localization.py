@@ -45,13 +45,16 @@ def _process_sample(
 
     [result] = results
     localizations = result.metadata["localizations"]
+    if not localizations:
+        return None
 
     loc_target = np.zeros((len(localizations[0]), input.rdkit_mol.GetNumAtoms()), dtype=np.float32)
     for localization in localizations:
         for idx_rewrite, idx_input in enumerate(localization):
-            loc_target[idx_rewrite][idx_input] += 1.0
+            if idx_input is not None:
+                loc_target[idx_rewrite][idx_input] += 1.0
 
-    loc_target /= loc_target.sum(axis=1, keepdims=True)
+    loc_target /= np.maximum(loc_target.sum(axis=1, keepdims=True), 1.0)
 
     return input_preprocess_fn(input), target, loc_target
 
@@ -75,7 +78,12 @@ def preprocess_samples(
     server = RuleApplicationServer(
         rulebase_dir=rulebase_dir,
         num_processes=num_processes,
-        rule_application_kwargs={"return_localization": True},
+        # Exact reference matching below replaces the inference-only size heuristic.
+        rule_application_kwargs={
+            "return_localization": True,
+            "include_unrestored": True,
+            "cutoff": 0.0,
+        },
     )
 
     # Get rid of labels which are not in the `rulebase` (e.g. they were too rare).
