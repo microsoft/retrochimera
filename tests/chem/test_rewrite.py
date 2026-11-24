@@ -41,6 +41,32 @@ def test_rewrite_implicit_hydrogens(
             ]
 
 
+def test_rewrite_implicit_hydrogens_with_degree_constraint() -> None:
+    rule = Rewrite.from_rdkit("([C:1](-[#1&^0:2])-[O&D1:3])>>([C:1]=[O:3].[#1:2]-[#1])")
+    results = rule.apply(Molecule("CCO"))
+    assert [result.mols for result in results] == [molecule_bag_from_smiles("CC=O.[H][H]")]
+
+
+@pytest.mark.parametrize("product", ["F[C@H](Cl)Br", "F[C@@H](Cl)Br", "FC(Cl)Br"])
+def test_rewrite_implicit_hydrogens_follow_reaction_matcher_chirality(product: str) -> None:
+    rule = Rewrite.from_rdkit(
+        "([C@:1](-[F:2])(-[Cl:3])(-[Br:4])-[#1:5])>>([C@:1](-[F:2])(-[Cl:3])(-[Br:4])-[#1:5])"
+    )
+    target = Molecule(product)
+    assert not rule.rdkit_reaction.GetSubstructParams().useChirality
+    assert rule.rdkit_reaction.RunReactants((Chem.AddHs(target.rdkit_mol),))
+
+    results = rule.apply(target)
+    assert [result.mols for result in results] == [molecule_bag_from_smiles(product)]
+
+
+@pytest.mark.parametrize("product", ["CC", "CCCl"])
+def test_rewrite_implicit_hydrogens_in_atom_or_query(product: str) -> None:
+    rule = Rewrite.from_rdkit("([C:1]-[#1,#17:2])>>([C:1]-[*:2])")
+    results = rule.apply(Molecule(product))
+    assert [result.mols for result in results] == [molecule_bag_from_smiles(product)]
+
+
 @pytest.mark.parametrize(
     "template,product,expected",
     [
@@ -58,6 +84,38 @@ def test_rewrite_restores_only_missing_charge_balancing_inorganic_counterions(
 ) -> None:
     [result] = Rewrite.from_rdkit(template).apply(Molecule(product))
     assert result.mols == molecule_bag_from_smiles(expected)
+
+
+def test_rewrite_restores_charge_balancing_spectator_cation() -> None:
+    product = "CC(=O)[O-].[Na+]"
+    [result] = Rewrite.from_rdkit("[O-:1]>>[O-:1]").apply(Molecule(product))
+    assert result.mols == molecule_bag_from_smiles(product)
+
+
+def test_rewrite_restores_only_charge_balancing_subset_of_spectator_anions() -> None:
+    rule = Rewrite.from_rdkit("[N&H3+:1]>>[N&H2&+0:1]")
+    [result] = rule.apply(Molecule("[NH3+]CC[NH3+].[Cl-].[Cl-]"))
+    assert result.mols == molecule_bag_from_smiles("NCC[NH3+].[Cl-]")
+
+
+def test_rewrite_does_not_restore_counterion_deleted_by_template() -> None:
+    rule = Rewrite.from_rdkit("([N+:1].[Cl-:2])>>[N+:1]")
+    [result] = rule.apply(Molecule("C[NH3+].[Cl-]"), return_localization=True)
+    assert result.mols == molecule_bag_from_smiles("C[NH3+]")
+
+
+@pytest.mark.parametrize(
+    "template,product",
+    [
+        ("[Ca+2:1]>>[Ca+2:1]", "[Ca+2].O=C([O-])[O-]"),
+        ("[N+:1]>>[N+:1]", "C[NH3+].O=C(O)[O-]"),
+    ],
+)
+def test_rewrite_restores_inorganic_carbon_containing_counterions(
+    template: str, product: str
+) -> None:
+    [result] = Rewrite.from_rdkit(template).apply(Molecule(product))
+    assert result.mols == molecule_bag_from_smiles(product)
 
 
 @pytest.mark.parametrize("return_localization", [True, False])
