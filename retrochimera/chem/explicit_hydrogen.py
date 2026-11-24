@@ -23,8 +23,8 @@ def hydrogen_inputs(
             Chem.AtomFromSmarts(f"[#{atom.GetAtomicNum()}]" if atom.GetAtomicNum() else "*"),
         )
     seen = set()
-    for match in expanded.GetSubstructMatches(relaxed_query, maxMatches=0):
-        # Equivalent H choices on one atom give the same graph, but distinct sites must survive.
+    for match in expanded.GetSubstructMatches(relaxed_query, maxMatches=1000):
+        # Deduplicate equivalent H choices within RDKit's bounded match set.
         sites = tuple(
             sorted(
                 expanded.GetAtomWithIdx(i).GetNeighbors()[0].GetIdx() for i in match if i >= size

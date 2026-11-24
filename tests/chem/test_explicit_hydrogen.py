@@ -1,12 +1,13 @@
 from itertools import combinations
 
+import pytest
 from rdkit import Chem
 
 from retrochimera.chem.explicit_hydrogen import hydrogen_inputs
 
 
-def test_hydrogen_inputs_do_not_truncate_distinct_attachment_sites() -> None:
-    mol = Chem.MolFromSmiles("C" * 24)
+def test_hydrogen_inputs_preserve_distinct_attachment_sites_below_match_cap() -> None:
+    mol = Chem.MolFromSmiles("C" * 8)
     query = Chem.MolFromSmarts("[C:1]-[#1:2].[C:3]-[#1:4]")
     sites = {
         tuple(
@@ -23,3 +24,21 @@ def test_hydrogen_inputs_do_not_truncate_distinct_attachment_sites() -> None:
     assert not (expected_pairs - sites), (
         f"Missing attachment pairs: {sorted(expected_pairs - sites)}"
     )
+
+
+def test_hydrogen_inputs_bound_raw_matches_before_deduplicating(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    get_matches = Chem.Mol.GetSubstructMatches
+    counts = []
+
+    def tracked_matches(mol, *args, **kwargs):
+        matches = get_matches(mol, *args, **kwargs)
+        counts.append(len(matches))
+        return matches
+
+    monkeypatch.setattr(Chem.Mol, "GetSubstructMatches", tracked_matches)
+    mol = Chem.MolFromSmiles("C" * 20)
+    query = Chem.MolFromSmarts("[C]-[#1].[C].[C].[C]")
+    assert list(hydrogen_inputs(mol, query))
+    assert counts == [1000]

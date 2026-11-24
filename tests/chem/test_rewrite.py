@@ -67,23 +67,35 @@ def test_rewrite_implicit_hydrogens_in_atom_or_query(product: str) -> None:
     assert [result.mols for result in results] == [molecule_bag_from_smiles(product)]
 
 
+@pytest.mark.parametrize("return_localization", [True, False])
 @pytest.mark.parametrize(
     "template,product,expected",
     [
         ("[N+:1]>>[N+:1]", "CC[NH3+].[Br-]", "CC[NH3+].[Br-]"),
         ("([N+:1].[Br-:2])>>([N+:1].[Br-:2])", "CC[NH3+].[Br-]", "CC[NH3+].[Br-]"),
         ("[Ca+2:1]>>[Ca+2:1]", "[Ca+2].[Cl-].[Cl-]", "[Ca+2].[Cl-].[Cl-]"),
-        ("[N&H3+:1]>>[N&H2&+0:1]", "CC[NH3+].[Br-]", "CCN"),
-        ("[N+:1]>>[N+:1]", "CC[NH3+].CC(=O)[O-]", "CC[NH3+]"),
-        ("[N+:1]>>[N+:1]", "CC[NH3+].[Br-].[Br-]", "CC[NH3+]"),
-        ("[N+:1]>>[N+:1]", "CC[NH3+].CC[NH3+].[Br-].[Br-]", "CC[NH3+]"),
+        ("[N&H3+:1]>>[N&H2&+0:1]", "CC[NH3+].[Br-]", "CCN.[Br-]"),
+        ("[N+:1]>>[N+:1]", "CC[NH3+].CC(=O)[O-]", "CC[NH3+].CC(=O)[O-]"),
+        ("[N+:1]>>[N+:1]", "CC[NH3+].[Br-].[Br-]", "CC[NH3+].[Br-].[Br-]"),
+        (
+            "[N+:1]>>[N+:1]",
+            "CC[NH3+].CC[NH3+].[Br-].[Br-]",
+            "CC[NH3+].CC[NH3+].[Br-].[Br-]",
+        ),
+        ("[N+:1]>>[N+:1]", "C[NH3+].[Na+].[Cl-].[Cl-]", "C[NH3+].[Na+].[Cl-].[Cl-]"),
+        ("[Na+:1]>>[Na+:1]", "[Na+].[C-]#N", "[Na+].[C-]#N"),
+        ("[O-:1]>>[O-:1]", "CC(=O)[O-].C[N+](C)(C)C", "CC(=O)[O-].C[N+](C)(C)C"),
+        ("[N+:1]>>[N+:1]", "CC[NH3+].[Br-].CCO", "CC[NH3+].[Br-]"),
     ],
 )
-def test_rewrite_restores_only_missing_charge_balancing_inorganic_counterions(
-    template: str, product: str, expected: str
+def test_rewrite_carries_all_unmatched_counterions(
+    template: str, product: str, expected: str, return_localization: bool
 ) -> None:
-    [result] = Rewrite.from_rdkit(template).apply(Molecule(product))
+    [result] = Rewrite.from_rdkit(template).apply(
+        Molecule(product), return_localization=return_localization
+    )
     assert result.mols == molecule_bag_from_smiles(expected)
+    assert bool(result.metadata) == return_localization
 
 
 def test_rewrite_restores_charge_balancing_spectator_cation() -> None:
@@ -98,26 +110,48 @@ def test_rewrite_restores_charge_balancing_spectator_cation() -> None:
         (
             "[N&H3+:1]>>[N&H2&+0:1]",
             "[NH3+]CC[NH3+].[Cl-].[Cl-]",
-            "NCC[NH3+].[Cl-]",
+            "NCC[NH3+].[Cl-].[Cl-]",
         ),
         (
             "[N&H2+:1]>>[N&H1&+0:1]",
             "[NH3+]CC[NH2+]CC[NH3+].[Cl-].O=S(=O)([O-])[O-]",
-            "[NH3+]CCNCC[NH3+].O=S(=O)([O-])[O-]",
+            "[NH3+]CCNCC[NH3+].[Cl-].O=S(=O)([O-])[O-]",
         ),
     ],
 )
-def test_rewrite_restores_only_charge_balancing_subset_of_spectator_anions(
+def test_rewrite_keeps_all_counterions_when_template_changes_charge(
     template: str, product: str, expected: str
 ) -> None:
     [result] = Rewrite.from_rdkit(template).apply(Molecule(product))
     assert result.mols == molecule_bag_from_smiles(expected)
 
 
-def test_rewrite_does_not_restore_counterion_deleted_by_template() -> None:
+@pytest.mark.parametrize(
+    "product,expected",
+    [
+        ("C[NH3+].[Cl-]", "C[NH3+]"),
+        ("C[NH3+].[Cl-].[Cl-]", "C[NH3+].[Cl-]"),
+    ],
+)
+def test_rewrite_does_not_restore_counterion_deleted_by_template(
+    product: str, expected: str
+) -> None:
     rule = Rewrite.from_rdkit("([N+:1].[Cl-:2])>>[N+:1]")
-    [result] = rule.apply(Molecule("C[NH3+].[Cl-]"), return_localization=True)
-    assert result.mols == molecule_bag_from_smiles("C[NH3+]")
+    [result] = rule.apply(Molecule(product), return_localization=True)
+    assert result.mols == molecule_bag_from_smiles(expected)
+
+
+@pytest.mark.parametrize("return_localization", [True, False])
+def test_rewrite_does_not_copy_fragment_matched_through_synthetic_hydrogen(
+    return_localization: bool,
+) -> None:
+    product = "C[NH3+].[Cl-]"
+    [result] = Rewrite.from_rdkit("[H:1]>>[H:1]").apply(
+        Molecule(product), return_localization=return_localization
+    )
+    assert result.mols == molecule_bag_from_smiles(product)
+    if return_localization:
+        assert all(localization == [None] for localization in result.metadata["localizations"])
 
 
 @pytest.mark.parametrize(

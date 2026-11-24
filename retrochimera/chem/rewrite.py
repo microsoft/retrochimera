@@ -185,11 +185,16 @@ class Rewrite:
             if "." in input.smiles:
                 if localization is None:
                     localization, _ = self._extract_localization(result_rdkit_mol)
-                matched_atoms = (
-                    localization
-                    if source_indices is None
-                    else [source_indices[i] for i in localization]
-                )
+                matched_atoms: list[Optional[int]] = [
+                    i if source_indices is None else source_indices[i] for i in localization
+                ]
+                if source_indices is not None:
+                    # A synthetic H has no encoder index, but its source fragment is retained.
+                    matched_atoms.extend(
+                        source_indices[atom.GetIntProp("react_atom_idx")]
+                        for atom in result_rdkit_mol.GetAtoms()
+                        if atom.HasProp("react_atom_idx")
+                    )
                 smiles = restore_counterions(
                     smiles, input.rdkit_mol, {i for i in matched_atoms if i is not None}
                 )

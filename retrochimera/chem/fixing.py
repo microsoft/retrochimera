@@ -157,40 +157,12 @@ def fix_mol(mol: Chem.Mol) -> Optional[str]:
 
 
 def restore_counterions(smiles: str, product: Chem.Mol, matched_atoms: set[int]) -> str:
-    if Chem.GetFormalCharge(product) != 0:
-        return smiles
-    precursor = Chem.MolFromSmiles(smiles)
-    if precursor is None:
-        return smiles
-    charge = Chem.GetFormalCharge(precursor)
-    if charge == 0:
-        return smiles
+    """Carry through every charged input fragment not involved in the template."""
     spectators = [
-        fragment
+        Chem.MolToSmiles(fragment)
         for fragment, indices in zip(
             Chem.GetMolFrags(product, asMols=True), Chem.GetMolFrags(product)
         )
-        if matched_atoms.isdisjoint(indices)
+        if Chem.GetFormalCharge(fragment) and matched_atoms.isdisjoint(indices)
     ]
-    # Do not compensate for a missing principal ion by retaining only its counterions.
-    if any(Chem.GetFormalCharge(fragment) * charge > 0 for fragment in spectators):
-        return smiles
-    choices: dict[int, list[str]] = {0: []}
-    for fragment in spectators:
-        fragment_charge = Chem.GetFormalCharge(fragment)
-        fragment_smiles = Chem.MolToSmiles(fragment)
-        if fragment_charge * charge >= 0 or (
-            any(a.GetAtomicNum() == 6 for a in fragment.GetAtoms())
-            and fragment_smiles not in {"O=C([O-])[O-]", "O=C([O-])O"}
-        ):
-            continue
-        for total, selected in list(choices.items()):
-            new_total = total + abs(fragment_charge)
-            if new_total <= abs(charge):
-                choices.setdefault(new_total, [*selected, fragment_smiles])
-        if abs(charge) in choices:
-            break
-    if abs(charge) not in choices:
-        return smiles
-    restored = ".".join([smiles, *choices[abs(charge)]])
-    return restored if Chem.GetFormalCharge(Chem.MolFromSmiles(restored)) == 0 else smiles
+    return ".".join([smiles, *spectators])
